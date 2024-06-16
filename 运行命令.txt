@@ -1,0 +1,1 @@
+yolo task=detect mode=train model=yolov8x-ghost-p2.yaml data=VisDrone.yaml epochs=200
