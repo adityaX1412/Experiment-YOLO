@@ -32,7 +32,7 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml",
+    data="ultralytics/data/data.yaml",
     epochs=3,
     batch=8,
     warmup_epochs = 2,
