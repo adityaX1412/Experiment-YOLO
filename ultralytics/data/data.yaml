@@ -5,13 +5,11 @@ test: /kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test
 nc: 6
 
 names:
-  0: pedestrian
-  1: people
-  2: bicycle
-  3: car
-  4: van
-  5: truck
-  6: tricycle
-  7: awning-tricycle
-  8: bus
-  9: motor
+  0: sheep
+  1: cattle
+  2: seal
+  3: camelus
+  4: kiang
+  5: zebra
+ 
+
