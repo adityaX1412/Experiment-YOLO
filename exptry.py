@@ -10,7 +10,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 wandb.login(key="833b800ff23eb3d26e6c85a8b9e1fc8bbafc9775") 
 wandb.init(project="yolov8_exp")
 # Load the custom model configuration
-model = YOLO('yolov8-ASF-P2m.yaml')
+model = YOLO('yolov8m-ASF-P2.yaml')
 model.model.to(device)
 
 # Define a callback to log losses at the end of each training batch
