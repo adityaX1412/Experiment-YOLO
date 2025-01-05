@@ -105,7 +105,7 @@ __all__ = (
     "C3Ghost",
     "GhostBottleneck",
     "Bottleneck",
-    "EBotlleneck",
+    "EBottleneck",
     "BottleneckCSP",
     "Proto",
     "Detect",
