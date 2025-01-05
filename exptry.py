@@ -36,7 +36,7 @@ Result_Final_model = model.train(
     epochs=40,
     batch=8,
     warmup_epochs = 2,
-    optimizer='auto',
+    optimizer='SOAP',
     project='yolov8_softshare',
     save=True,
 )
