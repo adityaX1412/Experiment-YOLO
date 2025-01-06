@@ -40,7 +40,14 @@ Result_Final_model = model.train(
     project='yolov8_softshare',
     save=True,
 )
-torch.save(model.model.state_dict(), "./yolovexp_waid.pth")
+# Define model and dataset names
+model_name = "yolov8_softspd"
+dataset_name = "waid"
+
+# Save the model as .pth file in Kaggle workspace
+save_path = f"/kaggle/working/models/{model_name}_{dataset_name}.pt"
+os.makedirs(os.path.dirname(save_path), exist_ok=True)
+torch.save(model.model.state_dict(), save_path)
 torch.cuda.empty_cache()
 
 # Finish the W&B run
