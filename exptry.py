@@ -35,7 +35,6 @@ Result_Final_model = model.train(
     data="ultralytics/data/data.yaml",
     epochs=40,
     batch=8,
-    warmup_epochs = 2,
     optimizer='SOAP',
     project='yolov8_softshare',
     save=True,
