@@ -3,8 +3,8 @@ warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    model = YOLO('runs/train/exp/weights/best.pt') # select your model.pt path
-    model.predict(source='dataset/images/test',
+    model = YOLO('/kaggle/input/spdyolon-weights/best.pt') # select your model.pt path
+    model.predict(source='/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml',
                   imgsz=640,
                   project='runs/detect',
                   name='exp',

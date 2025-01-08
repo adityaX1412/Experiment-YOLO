@@ -3,9 +3,9 @@ warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    model = YOLO('runs/train/yolov8m-ASF-P2-SoftNMS/weights/best.pt')
-    model.val(data='VisDrone.yaml',
-              split='val',
+    model = YOLO('/kaggle/input/spdyolon-weights/best.pt')
+    model.val(data='/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml',
+              split='test',
               imgsz=640,
               batch=16,
               # rect=False,
