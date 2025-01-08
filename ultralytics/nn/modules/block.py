@@ -425,9 +425,21 @@ class SC2f(nn.Module):
         # Add batch normalization for input stability
         self.bn_input = nn.BatchNorm2d(c1)
         
-        # Initialize template banks
-        self.template_bank1 = TemplateBank(num_templates, c1, 2 * self.c, kernel_size)
-        self.template_bank2 = TemplateBank(num_templates, 2 * self.c + n * self.c, c2, kernel_size)
+        # Create template banks with reduced templates and optimized dimensions
+        self.template_bank1 = TemplateBank(
+            num_templates=num_templates,  # Reduce number of templates
+            in_planes=c1,
+            out_planes=self.c * 2,  # Reduce output planes
+            kernel_size=kernel_size
+        )
+        
+        # Second template bank with reduced dimensions
+        self.template_bank2 = TemplateBank(
+            num_templates=num_templates,
+            in_planes=2 * self.c + n * self.c,
+            out_planes=c2,
+            kernel_size=1  # Use 1x1 conv for final fusion to reduce parameters
+        )
         
         # Modified SConv2d layers
         self.cv1 = SConv2d(self.template_bank1, stride=1, padding=1)
