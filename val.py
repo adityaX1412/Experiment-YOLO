@@ -13,7 +13,7 @@ def load_custom_weights(checkpoint_path, architecture_path='yolov8.yaml'):
     return model
 
 checkpoint_path = '/kaggle/input/nano-softshare-weights/yolov8_softshare_waid.pt'
-architecture_path = '/path/to/yolov8.yaml'  # Replace with the correct path to the YOLOv8 model architecture file
+architecture_path = 'yolov8n-ASF-P2.yaml'  # Replace with the correct path to the YOLOv8 model architecture file
 
 try:
     model = load_custom_weights(checkpoint_path, architecture_path)
