@@ -23,7 +23,7 @@ try:
         imgsz=640,
         batch=16,
         project='runs/val',
-        name='yolov8m-ASF',
+        name='yolov8n-ASF-P2',
     )
 except Exception as e:
     print(f"Error: {e}")
