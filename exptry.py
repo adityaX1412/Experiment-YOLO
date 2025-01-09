@@ -34,7 +34,7 @@ model.add_callback('on_train_batch_end', log_losses)
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
     data="ultralytics/data/data.yaml",
-    epochs=40,
+    epochs=70,
     batch=8,
     optimizer='SOAP',
     project='yolov8_softshare',
