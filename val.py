@@ -3,7 +3,7 @@ warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    model = YOLO('/kaggle/input/70-yolospdn-soap/best (1).pt')
+    model = YOLO('/kaggle/input/70-vanilla-soap/yolov8_softshare_waid (1).pt')
     model.val(data='/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml',
               split='test',
               imgsz=640,
