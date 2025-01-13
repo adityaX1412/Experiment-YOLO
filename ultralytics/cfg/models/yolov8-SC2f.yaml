@@ -1,0 +1,36 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# YOLOv8 object detection model with P2-P4 outputs and recurrent blocks for template sharing.
+
+# Parameters
+nc: 6  # number of classes
+scales: # model compound scaling constants, i.e. 'model=yolov8n.yaml' will call yolov8.yaml with scale 'n'
+  # [depth, width, max_channels]
+  n: [0.33, 0.25, 1024]  # YOLOv8n summary
+  s: [0.33, 0.50, 1024]  # YOLOv8s summary
+  m: [0.67, 0.75, 768]   # YOLOv8m summary
+  l: [1.00, 1.00, 512]   # YOLOv8l summary
+  x: [1.00, 1.25, 512]   # YOLOv8x summary
+
+# Backbone
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]]  # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]]  # 1-P2/4
+  - [-1, 1, SC2f, [128, True]]  # Recurrent Block at P2
+  - [-1, 1, Conv, [256, 3, 2]]  # 3-P3/8
+  - [-1, 1, SC2f, [256, True]]  # Recurrent Block at P3
+  - [-1, 1, Conv, [512, 3, 2]]  # 5-P4/16
+  - [-1, 1, SC2f, [512, True]]  # Recurrent Block at P4
+
+# Head
+head:
+  - [-1, 1, Conv, [256, 1, 1]]  # P4
+  - [2, 1, Conv, [256, 1, 1]]  # P2
+  - [[-1, 4], 1, Zoom_cat, []]  # cat backbone P3
+  - [-1, 1, SC2f, [256]]  # Recurrent Block for P3
+  - [-1, 1, Conv, [128, 3, 2]]  # Reduce to P2 resolution
+  - [[-1, 2], 1, Concat, []]  # Concatenate backbone P2
+  - [-1, 1, SC2f, [128]]  # Recurrent Block for P2-small
+
+  - [[6, 4, 2], 1, Detect, [nc]]  # Detection for P2, P3, and P4
+
