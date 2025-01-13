@@ -33,7 +33,7 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="ultralytics/data/data.yaml",
+    data="/kaggle/input/aerial-cows-yolov8/data.yaml",
     epochs=70,
     batch=8,
     optimizer='SOAP',
