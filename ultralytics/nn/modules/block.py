@@ -394,136 +394,116 @@ class ResNetLayer(nn.Module):
     def forward(self, x):
         """Forward pass through the ResNet layer."""
         return self.layer(x)
-    
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.nn.init as init
-
-
 class TemplateBank(nn.Module):
-    """
-    Global repository of shared templates with dynamic dimensional adaptation.
-    """
-    def __init__(self, num_templates, template_channels, kernel_size):
+    def __init__(self, num_templates, in_planes, out_planes, kernel_size):
         super(TemplateBank, self).__init__()
-        self.num_templates = num_templates
-        self.template_channels = template_channels
-        self.kernel_size = kernel_size
-        
-        # Initialize templates (shared across layers)
-        templates = [torch.Tensor(template_channels, template_channels, kernel_size, kernel_size) for _ in range(num_templates)]
-        for i in range(num_templates):
-            init.kaiming_normal_(templates[i])
-        self.templates = nn.Parameter(torch.stack(templates))  # Shared templates
-    
-    def forward(self, coefficients):
-        """
-        Generate filters for a layer using coefficients to combine shared templates.
-        """
-        return (self.templates * coefficients).sum(0)  # Weighted sum of templates
+        self.coefficient_shape = (num_templates,1,1,1,1)
+        templates = [torch.Tensor(out_planes, in_planes, kernel_size, kernel_size) for _ in range(num_templates)]
+        for i in range(num_templates): init.kaiming_normal_(templates[i])
+        self.templates = nn.Parameter(torch.stack(templates))
 
+    def forward(self, coefficients):
+        return (self.templates*coefficients).sum(0)
 
 class SConv2d(nn.Module):
-    """
-    Convolutional layer using shared templates with dynamic adaptation.
-    """
-    def __init__(self, template_bank, in_planes, out_planes, stride=1, padding=1):
+    def __init__(self, bank, stride=1, padding=1):
         super(SConv2d, self).__init__()
         self.stride = stride
         self.padding = padding
-        self.template_bank = template_bank
-        self.in_planes = in_planes
-        self.out_planes = out_planes
-        
-        # Dimensional adapters
-        self.input_adapter = nn.Conv2d(in_planes, template_bank.template_channels, kernel_size=1)
-        self.output_adapter = nn.Conv2d(template_bank.template_channels, out_planes, kernel_size=1)
-        
-        # Layer-specific coefficients
-        self.coefficients = nn.Parameter(
-            torch.zeros(template_bank.num_templates, 1, 1, 1, 1)
-        )
-    
-    def forward(self, x):
-        """
-        Forward pass with dynamic template adaptation.
-        """
-        # Adapt input dimensions to match templates
-        x = self.input_adapter(x)
-        
-        # Generate filters from the global template bank
-        filters = self.template_bank(self.coefficients)
-        
-        # Apply convolution using dynamic filters
-        x = F.conv2d(x, filters, stride=self.stride, padding=self.padding)
-        
-        # Adapt output dimensions back to match layer requirements
-        return self.output_adapter(x)
+        self.bank = bank
+        self.coefficients = nn.Parameter(torch.zeros(bank.coefficient_shape))
 
+    def forward(self, input):
+        params = self.bank(self.coefficients)
+        return F.conv2d(input, params, stride=self.stride, padding=self.padding)
 
 class SC2f(nn.Module):
-    """
-    SC2f module using recurrent-like template sharing.
-    """
-    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5, global_bank=None, kernel_size=3):
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5, num_templates=4, kernel_size=3):
         super().__init__()
-        self.c = int(c2 * e)  # Hidden channels
+        self.c = int(c2 * e)  # hidden channels
         
-        # Ensure a global template bank is shared
-        self.global_bank = global_bank
-        if self.global_bank is None:
-            raise ValueError("A global template bank must be provided.")
+        # Add batch normalization for input stability
+        self.bn_input = nn.BatchNorm2d(c1)
         
-        # Initialize convolution layers with dynamic adaptation
-        self.cv1 = SConv2d(self.global_bank, c1, 2 * self.c, stride=1, padding=kernel_size // 2)
-        self.cv2 = SConv2d(self.global_bank, 2 * self.c + n * self.c, c2, stride=1, padding=1)
+        # Initialize template banks
+        self.template_bank1 = TemplateBank(num_templates, c1, 2 * self.c, kernel_size)
+        self.template_bank2 = TemplateBank(num_templates, 2 * self.c + n * self.c, c2, kernel_size)
         
-        # Add batch normalization for stability
+        # Modified SConv2d layers
+        self.cv1 = SConv2d(self.template_bank1, stride=1, padding=1)
+        self.cv2 = SConv2d(self.template_bank2, stride=1, padding=1)
+        
+        # Add batch norm after each convolution
         self.bn1 = nn.BatchNorm2d(2 * self.c)
         self.bn2 = nn.BatchNorm2d(c2)
         
         # Bottleneck layers
         self.m = nn.ModuleList(
-            EBottleneck(self.c, self.c, shortcut=True, g=g, e=1.0)
+            Bottleneck(self.c, self.c, shortcut=True, g=g, k=((3, 3), (3, 3)), e=1.0) 
             for _ in range(n)
         )
         
-        # Lightweight channel attention
-        mid_channels = max(8, (2 * self.c + n * self.c) // 8)
+        # Channel attention
         self.channel_attention = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(2 * self.c + n * self.c, mid_channels, 1),
+            nn.Conv2d(2 * self.c + n * self.c, 2 * self.c + n * self.c, 1),
             nn.SiLU(),
-            nn.Conv2d(mid_channels, 2 * self.c + n * self.c, 1),
+            nn.Conv2d(2 * self.c + n * self.c, 2 * self.c + n * self.c, 1),
             nn.Sigmoid()
         )
         
+        # Initialize parameters
+        self._init_weights()
+
+    def _init_weights(self):
+        """Initialize weights for better training stability"""
+        with torch.no_grad():
+            # Initialize template coefficients
+            for m in self.modules():
+                if isinstance(m, SConv2d):
+                    nn.init.normal_(m.coefficients, mean=0.0, std=0.01)
+                elif isinstance(m, nn.Conv2d):
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.BatchNorm2d):
+                    nn.init.constant_(m.weight, 1)
+                    nn.init.constant_(m.bias, 0)
+
     def forward(self, x):
-        """
-        Forward pass with shared templates and feature normalization.
-        """
+        """Forward pass with improved feature normalization"""
+        # Input normalization
+        x = self.bn_input(x)
+        
         # First convolution with normalization
         conv1_out = self.cv1(x)
         conv1_out = self.bn1(conv1_out)
         y = list(conv1_out.chunk(2, 1))
         
         # Process through bottlenecks
+        bottleneck_outputs = []
         curr_feat = y[-1]
+        
         for bottleneck in self.m:
-            curr_feat = bottleneck(curr_feat)
-            y.append(curr_feat)
-        
+            bottle_out = bottleneck(curr_feat)
+            bottleneck_outputs.append(bottle_out)
+            curr_feat = bottle_out
+            
         # Combine all features
-        concat_features = torch.cat(y, 1)
+        y.extend(bottleneck_outputs)
+        concat_features = torch.cat(y, dim=1)
         
-        # Apply lightweight channel attention
+        # Apply channel attention
         attention = self.channel_attention(concat_features)
         concat_features = concat_features * attention
         
-        # Final convolution and normalization
+        # Final convolution with batch norm
         out = self.cv2(concat_features)
         return self.bn2(out)
+
+    def reset_parameters(self):
+        """Reset parameters for stability during training"""
+        self._init_weights()
 
 class ESC2f(nn.Module):
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5, num_templates=4, kernel_size=3):
