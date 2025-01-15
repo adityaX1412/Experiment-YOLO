@@ -9,7 +9,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Initialize a new W&B run
 wandb.login(key="833b800ff23eb3d26e6c85a8b9e1fc8bbafc9775") 
-wandb.init(project="yolov8_bucktales")
+wandb.init(project="yolov8_buck")
 # Load the custom model configuration
 model = YOLO('yolov8n-ASF-P2.yaml')
 model.model.to(device)
@@ -33,11 +33,11 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="ultralytics/data/data.yaml",
+    data="/kaggle/input/bucktales/yolov8_format_v1/yolov8_format_v1/dtc2023.yaml",
     epochs=70,
     batch=8,
     optimizer='SOAP',
-    project='yolov8_bucktales',
+    project='yolov8_buck',
     save=True,
 )
 # Define model and dataset names
