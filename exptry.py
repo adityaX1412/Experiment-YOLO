@@ -33,7 +33,7 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="/kaggle/input/bucktales/yolov8_format_v1/yolov8_format_v1/dtc2023.yaml",
+    data="/kaggle/input/bucktales/dtc2023.yaml",
     epochs=70,
     batch=8,
     optimizer='SOAP',
