@@ -1,0 +1,54 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Modified YOLOv8 object detection model with P2-P4 outputs
+
+# Parameters
+nc: 6  # number of classes
+scales: # model compound scaling constants
+  n: [0.33, 0.25, 1024]  # YOLOv8n summary
+  s: [0.33, 0.50, 1024]  # YOLOv8s summary
+  m: [0.67, 0.75, 768]   # YOLOv8m summary
+  l: [1.00, 1.00, 512]   # YOLOv8l summary
+  x: [1.00, 1.25, 512]   # YOLOv8x summary
+
+# Modified YOLOv8.0n backbone - removed P5 layers
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]]  # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]]  # 1-P2/4
+  - [-1, 3, C2f, [128, True]]
+  - [-1, 1, Conv, [256, 3, 2]]  # 3-P3/8
+  - [-1, 6, C2f, [256, True]]
+  - [-1, 1, Conv, [512, 3, 2]]  # 5-P4/16
+  - [-1, 6, C2f, [512, True]]
+  - [-1, 1, SPPF, [512, 5]]  # 7
+
+# Modified head to use P2-P4 instead of P3-P5
+head:
+  - [-1, 1, Conv, [256, 1, 1]] # 8
+  - [4, 1, Conv, [256, 1, 1]] # 9
+  - [[-1, 6, -2], 1, Zoom_cat, []]  # 10 cat backbone P4
+  - [-1, 3, C2f, [256]]  # 11
+
+  - [-1, 1, Conv, [128, 1, 1]] # 12
+  - [2, 1, Conv, [128, 1, 1]] # 13
+  - [[-1, 4, -2], 1, Zoom_cat, []]  # 14 cat backbone P3
+  - [-1, 3, C2f, [128]]  # 15
+
+  - [-1, 1, Conv, [128, 3, 2]] # 16
+  - [[-1, 12], 1, Concat, [1]]  # 17 cat head P3
+  - [-1, 3, C2f, [256]]  # 18 (P3/8-medium)
+
+  - [-1, 1, Conv, [256, 3, 2]] # 19
+  - [[-1, 8], 1, Concat, [1]]  # 20 cat head P4
+  - [-1, 3, C2f, [256]]  # 21 (P4/16-large)
+
+  - [[2, 4, 6], 1, ScalSeq, [128]] # 22 args[inchane]
+  - [[15, -1], 1, Add, []] # 23
+
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 24
+  - [[-1, 1], 1, Concat, []]  # 25 cat backbone P2
+  - [-1, 3, C2f, [128]]  # 26 (P2/4-small)
+
+  - [[1, 23, 18], 1, ScalSeq, [128]] # 27 args[inchane]
+  - [[26, -1], 1, Add, []] # 28
+
+  - [[28, 23, 18, 21], 1, Detect, [nc]]  # Detector(P2, P3, P4)
