@@ -41,7 +41,6 @@ from ultralytics.nn.backbone.TransNext import *
 from ultralytics.nn.backbone.rmt import *
 from ultralytics.nn.backbone.pkinet import *
 from ultralytics.nn.backbone.mobilenetv4 import *
-
 try:
     import thop
 except ImportError:
@@ -176,7 +175,7 @@ class BaseModel(nn.Module):
         """
         if not self.is_fused():
             for m in self.model.modules():
-                if isinstance(m, (Conv, Conv2, DWConv)) and hasattr(m, "bn"):
+                if isinstance(m, (Conv, Conv2, DWConv,LDConv)) and hasattr(m, "bn"):
                     if isinstance(m, Conv2):
                         m.fuse_convs()
                     m.conv = fuse_conv_and_bn(m.conv, m.bn)  # update conv
