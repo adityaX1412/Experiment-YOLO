@@ -8,12 +8,6 @@ import argparse
 # Check if CUDA is available and set the device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# Initialize a new W&B run
-parser = argparse.ArgumentParser()
-parser.add_argument("--key", type=str, help="wandbkey")
-args = parser.parse_args(args=[])
-
-wandb.login(key=args.key) 
 wandb.init(project="yolov8_softshare")
 # Load the custom model configuration
 model = YOLO('yolov8n-LD-P2.yaml')
