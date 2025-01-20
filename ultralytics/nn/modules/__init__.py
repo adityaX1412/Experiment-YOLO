@@ -123,5 +123,5 @@ __all__ = (
     "MLP",
     "ResNetLayer",
     "OBB",
-    "LDconv"
+    "LDConv"
 )
