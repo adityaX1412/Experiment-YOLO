@@ -4,14 +4,19 @@ from ultralytics.engine.model import Model
 import torch
 import wandb
 import os
+import argparse
 # Check if CUDA is available and set the device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Initialize a new W&B run
-wandb.login(key="833b800ff23eb3d26e6c85a8b9e1fc8bbafc9775") 
+parser = argparse.ArgumentParser()
+parser.add_argument("--key", type=str, help="wandbkey")
+args = parser.parse_args(args=[])
+
+wandb.login(key=args.key) 
 wandb.init(project="yolov8_softshare")
 # Load the custom model configuration
-model = YOLO('yolov8n-ASF-P2P2.yaml')
+model = YOLO('yolov8n-LD-P2.yaml')
 model.model.to(device)
 
 # Define a callback to log losses at the end of each training batch
