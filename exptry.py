@@ -36,7 +36,7 @@ Result_Final_model = model.train(
     epochs=70,
     batch=8,
     optimizer='SOAP',
-    project='yolov8_Moo_moo',
+    project='yolov8_buck_patched',
     save=True,
 )
 # Define model and dataset names
