@@ -352,9 +352,13 @@ class LDConv(nn.Module):
         self.stride = stride
         self.conv = nn.Sequential(nn.Conv2d(inc, outc, kernel_size=(num_param, 1), stride=(num_param, 1), bias=bias),nn.BatchNorm2d(outc),nn.SiLU())  # the conv adds the BN and SiLU to compare original Conv in YOLOv5.
         self.p_conv = nn.Conv2d(inc, 2 * num_param, kernel_size=3, padding=1, stride=stride)
-        nn.init.constant_(self.p_conv.weight, 0)
+        nn.init.uniform_(self.p_conv.weight, a=-1e-3, b=1e-3)
+        nn.init.constant_(self.p_conv.bias, 0)
+        # if torch.isnan(self.p_conv.weight).any():
+        #     print("theres an issue here")
         self.p_conv.register_full_backward_hook(self._set_lr)
-        self.register_buffer("p_n", self._get_p_n(N=self.num_param))
+        for p in self.parameters():
+            p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
 
     @staticmethod
     def _set_lr(module, grad_input, grad_output):
@@ -363,7 +367,16 @@ class LDConv(nn.Module):
 
     def forward(self, x):
         # N is num_param.
+        #print(f"x:{x.shape}")
         offset = self.p_conv(x)
+        #print(f"offset:{offset.shape}")
+        # if torch.isnan(offset).any():
+        #     nan_indices = torch.nonzero(torch.isnan(offset), as_tuple=True)
+        #     print(f"h: {h}, w: {w}")
+        #     print(f"NaN indices: {nan_indices}")
+        #     print(f"Values around NaN: {offset[nan_indices[0][0], :, max(0, nan_indices[2][0]-1):nan_indices[2][0]+2, max(0, nan_indices[3][0]-1):nan_indices[3][0]+2]}")
+
+        h, w = x.size(2), x.size(3)
         dtype = offset.data.type()
         N = offset.size(1) // 2
         # (b, 2N, h, w)
@@ -380,6 +393,25 @@ class LDConv(nn.Module):
                          dim=-1).long()
         q_lb = torch.cat([q_lt[..., :N], q_rb[..., N:]], dim=-1)
         q_rt = torch.cat([q_rb[..., :N], q_lt[..., N:]], dim=-1)
+
+# Print specific values from each tensor at a chosen index
+        # print(f"q_lt height index (first element): {q_lt[..., :N][0]}")
+        # print(f"q_lt: {q_lt[0, 0, 0]}")  # Printing one value, adjust indices if needed
+
+        # print(f"q_rb: {q_rb[0, 0, 0]}")  # Adjust to print the desired single value
+        # print(f"q_lb: {q_lb[0, 0, 0]}")  # Adjust to print the desired single value
+        # print(f"q_rt: {q_rt[0, 0, 0]}")  # Adjust to print the desired single value
+
+
+        def check_indices(indices, name, h, w):
+            assert torch.all(indices[..., :N] >= 0) and torch.all(indices[..., :N] < h), f"{name} indices out of height bounds"
+            assert torch.all(indices[..., N:] >= 0) and torch.all(indices[..., N:] < w), f"{name} indices out of width bounds"
+
+
+        check_indices(q_lt, "q_lt", h, w)
+        check_indices(q_rb, "q_rb", h, w)
+        check_indices(q_lb, "q_lb", h, w)
+        check_indices(q_rt, "q_rt", h, w)
 
         # clip p
         p = torch.cat([torch.clamp(p[..., :N], 0, x.size(2) - 1), torch.clamp(p[..., N:], 0, x.size(3) - 1)], dim=-1)
@@ -408,7 +440,7 @@ class LDConv(nn.Module):
         return out
 
     # generating the inital sampled shapes for the LDConv with different sizes.
-    def _get_p_n(self, N):
+    def _get_p_n(self, N, dtype):
         base_int = round(math.sqrt(self.num_param))
         row_number = self.num_param // base_int
         mod_number = self.num_param % base_int
@@ -426,7 +458,7 @@ class LDConv(nn.Module):
             mod_p_n_y = torch.flatten(mod_p_n_y)
             p_n_x,p_n_y  = torch.cat((p_n_x,mod_p_n_x)),torch.cat((p_n_y,mod_p_n_y))
         p_n = torch.cat([p_n_x,p_n_y], 0)
-        p_n = p_n.view(1, 2 * N, 1, 1)
+        p_n = p_n.view(1, 2 * N, 1, 1).type(dtype)
         return p_n
 
     # no zero-padding
@@ -441,14 +473,27 @@ class LDConv(nn.Module):
 
         return p_0
 
+    def _get_p_n1(self, N, dtype):
+        p_n_x = torch.tensor([0, 0, 1, 2, 2])
+        p_n_y = torch.tensor([0, 2, 1, 0, 2])
+        p_n = torch.cat([p_n_x,p_n_y], 0)
+        p_n = p_n.view(1, 2 * N, 1, 1).type(dtype)
+        return p_n
+        
     def _get_p(self, offset, dtype):
         N, h, w = offset.size(1) // 2, offset.size(2), offset.size(3)
 
         # (1, 2N, 1, 1)
-        # p_n = self._get_p_n(N, dtype)
+        p_n = self._get_p_n1(N, dtype)
         # (1, 2N, h, w)
         p_0 = self._get_p_0(h, w, N, dtype)
-        p = p_0 + self.p_n + offset
+        #print(f"p_0:{p_0.dtype}, p_n: {p_n.dtype}, offset: {offset.data.type}")
+        if torch.isnan(offset).any():
+            p = p_0 + p_n
+            #offset = torch.where(torch.isnan(offset), torch.zeros_like(offset), offset)
+        else:
+            p =  p_0 + p_n + offset
+        # print(f"p: {p}")
         return p
 
     def _get_x_q(self, x, q, N):
