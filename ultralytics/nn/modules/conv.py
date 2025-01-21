@@ -452,32 +452,38 @@ class LDConv(nn.Module):
         return p
 
     def _get_x_q(self, x, q, N):
-        b, h, w, _ = q.size()
-        padded_w = x.size(3)
-        c = x.size(1)
+        b, h_q, w_q, _ = q.size()  # Spatial dimensions of q (post-stride)
+        h_x = x.size(2)  # Height of input x
+        w_x = x.size(3)  # Width of input x
+        padded_w = w_x   # Use original width for index calculation
         
-        # Clamp the coordinates to ensure they are within valid bounds
-        q_x = torch.clamp(q[..., :N], 0, h - 1)  # Clamp x coordinates
-        q_y = torch.clamp(q[..., N:], 0, w - 1)  # Clamp y coordinates
+        # Extract and clamp coordinates to x's spatial dimensions
+        q_x = torch.clamp(q[..., :N], 0, h_x - 1)  # Clamp x-coordinates
+        q_y = torch.clamp(q[..., N:], 0, w_x - 1)  # Clamp y-coordinates
         
-        # Compute the index
-        index = q_x * padded_w + q_y  # offset_x * w + offset_y
+        # Compute flat indices
+        index = q_x * padded_w + q_y  # Shape: (b, h_q, w_q, N)
         
-        # Validate the indices
-        max_index = h * w - 1
-        assert torch.all(index >= 0) and torch.all(index <= max_index), "Index out of bounds"
+        # Validate indices are within bounds
+        max_index = h_x * w_x - 1
+        if not (torch.all(index >= 0) and torch.all(index <= max_index)):
+            invalid = torch.logical_or(index < 0, index > max_index)
+            print(f"Invalid indices found: {invalid.sum()} entries")
+            raise AssertionError(f"Index out of bounds. Min: {index.min()}, Max: {index.max()}, Allowed: [0, {max_index}]")
         
-        # (b, c, h*w)
-        x = x.contiguous().view(b, c, -1)
+        # Reshape input x to (b, c, h_x * w_x)
+        x_flat = x.contiguous().view(b, -1, h_x * w_x)
+        c = x_flat.size(1)
         
-        # (b, c, h*w*N)
-        index = index.contiguous().unsqueeze(dim=1).expand(-1, c, -1, -1, -1).contiguous().view(b, c, -1)
+        # Prepare index tensor for gathering
+        index = index.view(b, h_q, w_q, N)  # Ensure correct shape
+        index = index.unsqueeze(1).expand(-1, c, -1, -1, -1)  # Shape: (b, c, h_q, w_q, N)
+        index = index.contiguous().view(b, c, -1)  # Flatten to (b, c, h_q * w_q * N)
         
-        # Gather the values
-        x_offset = x.gather(dim=-1, index=index).contiguous().view(b, c, h, w, N)
-        print(f"q_x min: {q_x.min()}, q_x max: {q_x.max()}")
-        print(f"q_y min: {q_y.min()}, q_y max: {q_y.max()}")
-        print(f"index min: {index.min()}, index max: {index.max()}")
+        # Gather values from x_flat using index
+        x_offset = x_flat.gather(dim=-1, index=index)  # Shape: (b, c, h_q * w_q * N)
+        x_offset = x_offset.view(b, c, h_q, w_q, N)  # Reshape to (b, c, h_q, w_q, N)
+        
         return x_offset
 
     
