@@ -35,7 +35,7 @@ Result_Final_model = model.train(
     data="/kaggle/input/bucktales-patched/dtc2023.yaml",
     epochs=70,
     batch=8,
-    optimizer='SOAP',
+    optimizer='auto',
     project='yolov8_buck_patched',
     save=True,
 )
