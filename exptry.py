@@ -39,8 +39,6 @@ Result_Final_model = model.train(
     optimizer='SOAP',
     project='yolov8_moo_moo',
     save=True,
-    lr0=0.00001,
-    lrf=1,
 )
 # Define model and dataset names
 model_name = "yolov8_softspd"
