@@ -35,6 +35,7 @@ Result_Final_model = model.train(
     data="/kaggle/input/aerial-cows-yolov8/data.yaml",
     epochs=70,
     batch=8,
+    imgsz = 1280,
     optimizer='SOAP',
     project='yolov8_moo_moo',
     save=True,
