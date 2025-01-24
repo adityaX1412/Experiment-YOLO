@@ -42,7 +42,7 @@ Result_Final_model = model.train(
 )
 # Define model and dataset names
 model_name = "yolov8_softspd"
-dataset_name = "waid"
+dataset_name = "aerial_cows_yolov8"
 
 # Save the model as .pth file in Kaggle workspace
 save_path = f"/kaggle/working/models/{model_name}_{dataset_name}.pt"
