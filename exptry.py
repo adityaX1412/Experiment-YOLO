@@ -10,7 +10,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 wandb.init(project="yolov8_softshare")
 # Load the custom model configuration
-model = YOLO('yolov8n-LD-P2.yaml')
+model = YOLO('yolov8n-ASF-P2.yaml')
 model.model.to(device)
 
 # Define a callback to log losses at the end of each training batch
@@ -34,9 +34,9 @@ model.add_callback('on_train_batch_end', log_losses)
 Result_Final_model = model.train(
     data="/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml",
     epochs=70,
-    batch=16,
+    batch=8,
     imgsz = 640,
-    optimizer='SOAP',
+    optimizer='auto',
     project='yolov8_softshare',
     save=True,
 )
