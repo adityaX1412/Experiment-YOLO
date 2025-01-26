@@ -39,7 +39,8 @@ Result_Final_model = model.train(
     project='yolov8_buck_patched',
     save=True,
     imgsz = 1280,
-    warmup_epochs = 5
+    warmup_epochs = 5,
+    cos_lr = True,
 )
 # Define model and dataset names
 model_name = "yolov8_softspd"
