@@ -8,7 +8,7 @@ import argparse
 # Check if CUDA is available and set the device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-wandb.init(project="yolov8_moomoo")
+wandb.init(project="yolov8_softshare")
 # Load the custom model configuration
 model = YOLO('yolov8n-LD-P2.yaml')
 model.model.to(device)
@@ -32,17 +32,17 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="/kaggle/input/aerial-cows-yolov8/data.yaml",
+    data="/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml",
     epochs=70,
-    batch=8,
-    imgsz = 1280,
+    batch=16,
+    imgsz = 640,
     optimizer='SOAP',
-    project='yolov8_moo_moo',
+    project='yolov8_softshare',
     save=True,
 )
 # Define model and dataset names
-model_name = "yolov8_softspd"
-dataset_name = "aerial_cows_yolov8"
+model_name = "yolov8_spd"
+dataset_name = "waid_yolov8"
 
 # Save the model as .pth file in Kaggle workspace
 save_path = f"/kaggle/working/models/{model_name}_{dataset_name}.pt"
