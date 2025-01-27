@@ -183,7 +183,41 @@ class FocalLoss_YOLO(nn.Module):
             alpha_factor = label * self.alpha + (1 - label) * (1 - self.alpha)
             loss *= alpha_factor
         return loss
+        
+class HingeLoss_YOLO(nn.Module):
+    def __init__(self, margin=1.0):
+        """
+        Hinge Loss implementation for YOLO confidence scores
+        Args:
+            margin (float): margin for the hinge loss, default is 1.0
+        """
+        super().__init__()
+        self.margin = margin
 
+    def forward(self, pred_scores, target_scores):
+        """
+        Calculate hinge loss between predicted and target scores
+        Args:
+            pred_scores: predicted confidence scores
+            target_scores: target confidence scores (0 or 1)
+        """
+        # Convert predictions to proper range
+        pred_scores = torch.sigmoid(pred_scores)
+        
+        # Calculate loss for positive samples (target = 1)
+        positive_loss = torch.clamp(self.margin - pred_scores, min=0)
+        positive_mask = (target_scores == 1).float()
+        positive_loss = positive_loss * positive_mask
+        
+        # Calculate loss for negative samples (target = 0)
+        negative_loss = torch.clamp(pred_scores - (-self.margin), min=0)
+        negative_mask = (target_scores == 0).float()
+        negative_loss = negative_loss * negative_mask
+        
+        # Combine losses
+        loss = positive_loss + negative_loss
+        return loss
+        
 class BboxLoss(nn.Module):
 
     def __init__(self, reg_max, use_dfl=False):
@@ -300,12 +334,13 @@ class v8DetectionLoss:
         h = model.args  # hyperparameters
 
         m = model.model[-1]  # Detect() module
-        self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        #self.bce = nn.BCEWithLogitsLoss(reduction="none")
         # self.bce = EMASlideLoss(nn.BCEWithLogitsLoss(reduction='none'))  # Exponential Moving Average Slide Loss
         # self.bce = SlideLoss(nn.BCEWithLogitsLoss(reduction='none')) # Slide Loss
         # self.bce = FocalLoss_YOLO(alpha=0.25, gamma=1.5) # FocalLoss
         # self.bce = VarifocalLoss_YOLO(alpha=0.75, gamma=2.0) # VarifocalLoss
         # self.bce = QualityfocalLoss_YOLO(beta=2.0) # QualityfocalLoss
+        self.bce = HingeLoss_YOLO(margin=1.0)
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
@@ -399,7 +434,9 @@ class v8DetectionLoss:
         target_scores_sum = max(target_scores.sum(), 1)
 
         # cls loss
-        if isinstance(self.bce, (nn.BCEWithLogitsLoss, FocalLoss_YOLO)):
+        if isinstance(self.bce, HingeLoss_YOLO):
+            loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # Hinge Loss
+        elif isinstance(self.bce, (nn.BCEWithLogitsLoss, FocalLoss_YOLO)):
             loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
         elif isinstance(self.bce, VarifocalLoss_YOLO):
             if fg_mask.sum():
