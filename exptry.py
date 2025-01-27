@@ -34,12 +34,12 @@ model.add_callback('on_train_batch_end', log_losses)
 Result_Final_model = model.train(
     data="/kaggle/input/bucktales-patched/dtc2023.yaml",
     epochs=70,
-    batch=8,
+    batch=16,
     optimizer='SOAP',
     project='yolov8_buck_patched',
     save=True,
     imgsz = 1280,
-    lr0 = 1e-3
+    warmup_epochs = 5
 )
 # Define model and dataset names
 model_name = "yolov8_softspd"
