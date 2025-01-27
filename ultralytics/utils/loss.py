@@ -190,7 +190,7 @@ class BboxLoss(nn.Module):
         """Initialize the BboxLoss module with regularization maximum and DFL settings."""
         super().__init__()
         self.reg_max = reg_max
-        self.use_dfl = use_dfl
+        self.use_dfl = True
         self.nwd_loss = False
         self.iou_ratio = 0.5
         
