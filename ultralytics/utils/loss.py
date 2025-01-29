@@ -185,38 +185,60 @@ class FocalLoss_YOLO(nn.Module):
         return loss
         
 class HingeLoss_YOLO(nn.Module):
-    def __init__(self, margin=1.0):
+    def __init__(self, pos_margin=1.0, neg_margin=0.0, reduction='mean', normalize_factor=1/8):
         """
-        Hinge Loss implementation for YOLO confidence scores
+        Hinge Loss for YOLO with range normalization
         Args:
-            margin (float): margin for the hinge loss, default is 1.0
+            pos_margin: Margin for positive samples (typically >0)
+            neg_margin: Margin for negative samples (typically <=0)
+            reduction: Reduction method ('mean', 'sum', 'none')
+            normalize_factor: Factor to normalize loss range (default 1/8 to match BCE range)
         """
         super().__init__()
-        self.margin = margin
+        self.pos_margin = pos_margin
+        self.neg_margin = neg_margin
+        self.reduction = reduction
+        self.normalize_factor = normalize_factor  # Added to match other loss ranges
 
-    def forward(self, pred_scores, target_scores):
+    def forward(self, pred_logits, target_scores):
         """
-        Calculate hinge loss between predicted and target scores
-        Args:
-            pred_scores: predicted confidence scores
-            target_scores: target confidence scores (0 or 1)
+        pred_logits: Raw network outputs (no sigmoid!)
+        target_scores: Continuous targets [0,1] from TaskAlignedAssigner
         """
-        # Convert predictions to proper range
-        pred_scores = torch.sigmoid(pred_scores)
+        if not torch.is_tensor(pred_logits) or not torch.is_tensor(target_scores):
+            raise TypeError("Inputs must be PyTorch tensors")
+        if pred_logits.shape != target_scores.shape:
+            raise ValueError("Predictions and targets must have same shape")
+
+        # Calculate masks using thresholds instead of exact values
+        pos_mask = (target_scores >= 0.5).float()
+        neg_mask = (target_scores < 0.5).float()
         
-        # Calculate loss for positive samples (target = 1)
-        positive_loss = torch.clamp(self.margin - pred_scores, min=0)
-        positive_mask = (target_scores == 1).float()
-        positive_loss = positive_loss * positive_mask
+        # Calculate weighted positive and negative losses
+        pos_weight = target_scores * pos_mask  # Weight by confidence for positive samples
+        neg_weight = (1 - target_scores) * neg_mask  # Weight by inverse confidence for negative samples
         
-        # Calculate loss for negative samples (target = 0)
-        negative_loss = torch.clamp(pred_scores - (-self.margin), min=0)
-        negative_mask = (target_scores == 0).float()
-        negative_loss = negative_loss * negative_mask
+        # Positive loss: penalize if prediction < pos_margin
+        pos_loss = torch.clamp(self.pos_margin - pred_logits, min=0) * pos_weight
         
-        # Combine losses
-        loss = positive_loss + negative_loss
-        return loss
+        # Negative loss: penalize if prediction > neg_margin
+        neg_loss = torch.clamp(pred_logits - self.neg_margin, min=0) * neg_weight
+        
+        # Combine losses and normalize to match BCE range
+        loss = (pos_loss + neg_loss) * self.normalize_factor
+        
+        # Handle NaN values
+        if torch.isnan(loss).any():
+            warnings.warn("NaN values detected in HingeLoss computation")
+            return torch.zeros_like(loss)
+        
+        # Apply reduction
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:  # 'none'
+            return loss
         
 class BboxLoss(nn.Module):
 
@@ -338,9 +360,9 @@ class v8DetectionLoss:
         # self.bce = EMASlideLoss(nn.BCEWithLogitsLoss(reduction='none'))  # Exponential Moving Average Slide Loss
         # self.bce = SlideLoss(nn.BCEWithLogitsLoss(reduction='none')) # Slide Loss
         # self.bce = FocalLoss_YOLO(alpha=0.25, gamma=1.5) # FocalLoss
-        self.bce = VarifocalLoss_YOLO(alpha=0.75, gamma=2.0) # VarifocalLoss
+        # self.bce = VarifocalLoss_YOLO(alpha=0.75, gamma=2.0) # VarifocalLoss
         # self.bce = QualityfocalLoss_YOLO(beta=2.0) # QualityfocalLoss
-        # self.bce = HingeLoss_YOLO(margin=1.0)
+        self.bce = HingeLoss_YOLO(pos_margin=1.0,neg_margin=0.0,reduction='none',normalize_factor=1/8)  # Normalizes to roughly match BCE range
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
