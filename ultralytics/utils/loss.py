@@ -338,9 +338,9 @@ class v8DetectionLoss:
         # self.bce = EMASlideLoss(nn.BCEWithLogitsLoss(reduction='none'))  # Exponential Moving Average Slide Loss
         # self.bce = SlideLoss(nn.BCEWithLogitsLoss(reduction='none')) # Slide Loss
         # self.bce = FocalLoss_YOLO(alpha=0.25, gamma=1.5) # FocalLoss
-        # self.bce = VarifocalLoss_YOLO(alpha=0.75, gamma=2.0) # VarifocalLoss
+        self.bce = VarifocalLoss_YOLO(alpha=0.75, gamma=2.0) # VarifocalLoss
         # self.bce = QualityfocalLoss_YOLO(beta=2.0) # QualityfocalLoss
-        self.bce = HingeLoss_YOLO(margin=1.0)
+        # self.bce = HingeLoss_YOLO(margin=1.0)
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
