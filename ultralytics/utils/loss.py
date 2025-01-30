@@ -356,13 +356,13 @@ class v8DetectionLoss:
         h = model.args  # hyperparameters
 
         m = model.model[-1]  # Detect() module
-        #self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        self.bce = nn.BCEWithLogitsLoss(reduction="none")
         # self.bce = EMASlideLoss(nn.BCEWithLogitsLoss(reduction='none'))  # Exponential Moving Average Slide Loss
         # self.bce = SlideLoss(nn.BCEWithLogitsLoss(reduction='none')) # Slide Loss
         # self.bce = FocalLoss_YOLO(alpha=0.25, gamma=1.5) # FocalLoss
         # self.bce = VarifocalLoss_YOLO(alpha=0.75, gamma=2.0) # VarifocalLoss
         # self.bce = QualityfocalLoss_YOLO(beta=2.0) # QualityfocalLoss
-        self.bce = HingeLoss_YOLO(pos_margin=1.0,neg_margin=0.0,reduction='none',normalize_factor=1/8)  # Normalizes to roughly match BCE range
+        #self.bce = HingeLoss_YOLO(pos_margin=1.0,neg_margin=0.0,reduction='none',normalize_factor=1/8)  # Normalizes to roughly match BCE range
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes

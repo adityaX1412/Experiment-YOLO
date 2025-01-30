@@ -10,7 +10,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # Initialize a new W&B run
 wandb.init(project="yolov8_buck_patched")
 # Load the custom model configuration
-model = YOLO('yolov8n-ASF-P2P2.yaml')
+model = YOLO('yolov8n-ASF-P2.yaml')
 model.model.to(device)
 
 # Define a callback to log losses at the end of each training batch
