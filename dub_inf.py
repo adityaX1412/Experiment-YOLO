@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.utils
 import torchvision.datasets as dset
 import torch.nn.functional as F
-import torch.nn.modules as M
+import torch.nn.Module as M
 import torch.backends.cudnn as cudnn
 from ultralytics import YOLO
 import wandb
