@@ -19,6 +19,9 @@ import yaml
 from torch.autograd import Variable
 from ultralytics.utils.loss import v8DetectionLoss
 from torchmetrics.detection import MeanAveragePrecision
+from ultralytics.nn.tasks import DetectionModel
+
+torch.serialization.add_safe_globals([DetectionModel])
 
 #counting the next 3
 total_predictions = 0
