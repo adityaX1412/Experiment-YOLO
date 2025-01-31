@@ -109,7 +109,7 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
 image_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test'
 label_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test'
 
-model = YOLO('yolov8n.yaml')
+model = YOLO('yolov8-LD-P2.yaml')
 
 model_state_dict = torch.load("/kaggle/input/yolo-weights/weights/spdld.pt")
 model.model.load_state_dict(model_state_dict, strict=True)
