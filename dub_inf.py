@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.utils
 import torchvision.datasets as dset
 import torch.nn.functional as F
+import torch.nn.modules as M
 import torch.backends.cudnn as cudnn
 from ultralytics import YOLO
 import wandb
@@ -110,8 +111,8 @@ image_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test'
 label_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test'
 
 model = YOLO('yolov8-LD-P2.yaml')
-
-model_state_dict = torch.load("/kaggle/input/yolo-weights/weights/spdld.pt",strict = False)
+state_dict = "/kaggle/input/yolo-weights/weights/spdld.pt"
+model_state_dict = M.load_state_dict(state_dict, strict=False)
 counta = 0
 
 for image_path in os.listdir(image_dir):
