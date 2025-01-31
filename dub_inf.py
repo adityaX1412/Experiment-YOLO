@@ -13,7 +13,6 @@ import torchvision.datasets as dset
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 from ultralytics import YOLO
-from ultralytics.utils.loss import DFLoss, BboxLoss
 import wandb
 import numpy as np
 import yaml
