@@ -19,9 +19,6 @@ import yaml
 from torch.autograd import Variable
 from ultralytics.utils.loss import v8DetectionLoss
 from torchmetrics.detection import MeanAveragePrecision
-from ultralytics.nn.tasks import DetectionModel
-
-torch.serialization.add_safe_globals([DetectionModel])
 
 #counting the next 3
 total_predictions = 0
@@ -113,7 +110,7 @@ image_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test'
 label_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test'
 
 model = YOLO('yolov8-LD-P2.yaml')
-state_dict = torch.load("/kaggle/input/yolo-weights/weights/spdld.pt",weights_only=True)
+state_dict = torch.load("/kaggle/input/yolo-weights/weights/spdld.pt")
 model.model.load_state_dict(state_dict, strict=False)
 conf_threshold = 0.7
 metric = MeanAveragePrecision(class_metrics=True)
@@ -123,7 +120,7 @@ for image_path in os.listdir(image_dir):
     # Load image and initial prediction
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
     img_width, img_height = img.size
-    initial_results = model.predict(img, conf=0.1)
+    initial_results = model.predict(img, conf=0.25)
     result = initial_results[0]
     
     # Load ground truth
