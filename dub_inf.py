@@ -110,7 +110,7 @@ image_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test'
 label_dir = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test'
 
 model = YOLO('yolov8-LD-P2.yaml')
-state_dict = torch.load("/kaggle/input/yolo-weights/weights/spdld.pt")
+state_dict = torch.load("/kaggle/input/yolo-weights/weights/spdld.pt",weights_only=True)
 model.model.load_state_dict(state_dict, strict=False)
 conf_threshold = 0.7
 metric = MeanAveragePrecision(class_metrics=True)
