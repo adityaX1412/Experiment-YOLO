@@ -13,7 +13,7 @@ from timm.layers import DropPath  # Example, update as per requirement
 # Constants
 image_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 label_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
-model_weights = "/kaggle/input/yolo-weights/weights/spdn_soap.pt"
+model_weights = "/kaggle/input/yolo-weights/weights/spdn  soap.pt"
 conf_threshold = 0.1  # Lower for debugging, adjust as needed
 iou_threshold = 0.5
 
