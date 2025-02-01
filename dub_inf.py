@@ -17,10 +17,19 @@ model_weights = "/kaggle/input/yolo-weights/weights/spdn  soap.pt"
 conf_threshold = 0.1  # Lower for debugging, adjust as needed
 iou_threshold = 0.5
 
-# Initialize YOLO model
 model = YOLO("yolov8-ASF-P2.yaml")
-state_dict = torch.load(model_weights, weights_only=True)  # Secure loading
+
+# Load state_dict safely
+state_dict = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+# If loading fails, check if state_dict is nested
+if "model" in state_dict:
+    state_dict = state_dict["model"]  # Extract actual weights if wrapped in a dictionary
+
+# Load weights into the model
 model.model.load_state_dict(state_dict, strict=False)
+
+print("✅ Model weights loaded successfully!")
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
