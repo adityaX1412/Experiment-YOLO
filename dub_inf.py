@@ -49,7 +49,7 @@ transform = transforms.Compose([
 ])
 
 # Helper function: Non-Maximum Suppression
-def simple_nms(boxes, scores, iou_threshold=0.5):
+def simple_nms(boxes, scores, iou_threshold=0):
     """Applies Non-Maximum Suppression (NMS) to remove overlapping boxes."""
     boxes = boxes.clone().detach()  # Avoid in-place modifications
     scores = scores.clone().detach()
@@ -134,7 +134,7 @@ for image_path in os.listdir(image_dir):
         boxes_tensor = torch.tensor(predictions["boxes"]).clone().detach()
         scores_tensor = torch.tensor(predictions["scores"]).clone().detach()
         labels_tensor = torch.tensor(predictions["labels"]).clone().detach()
-        keep_indices = simple_nms(boxes_tensor, scores_tensor, iou_threshold=0.5)
+        keep_indices = simple_nms(boxes_tensor, scores_tensor, iou_threshold=0.25)
 
         filtered_predictions = {
             "boxes": boxes_tensor[keep_indices].tolist(),
