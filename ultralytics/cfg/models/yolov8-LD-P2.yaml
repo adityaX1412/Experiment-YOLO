@@ -2,7 +2,7 @@
 # Modified YOLOv8 object detection model with P2-P4 outputs
 
 # Parameters
-nc: 1  # number of classes
+nc: 6  # number of classes
 scales: # model compound scaling constants
   n: [0.33, 0.25, 1024]  # YOLOv8n summary
   s: [0.33, 0.50, 1024]  # YOLOv8s summary
