@@ -4,37 +4,29 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
-from torchvision import transforms
-from torch import amp
 
 # Constants
 image_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 label_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 model_weights = "/kaggle/input/yolo-weights/weights/spdld.pt"
-conf_threshold = 0.7 
+conf_threshold = 0.7
 iou_threshold = 0.5
 
+# Initialize YOLO model
 model = YOLO("yolov8n-LD-P2.yaml")
 
-# Load the model checkpoint (not just weights)
-checkpoint = torch.load(model_weights,map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-
-# Check if `checkpoint` is a full model object
+# Load model checkpoint
+checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 if isinstance(checkpoint, torch.nn.Module):
-    print("⚠️ Loaded full model instead of state_dict!")
-    state_dict = checkpoint.state_dict()  # Extract weights
+    state_dict = checkpoint.state_dict()
 elif isinstance(checkpoint, dict) and "model" in checkpoint:
-    print("✅ Extracting state_dict from checkpoint dictionary...")
-    state_dict = checkpoint["model"].state_dict()  # Extract from wrapped model
+    state_dict = checkpoint["model"].state_dict()
 elif isinstance(checkpoint, dict):
-    print("✅ Using checkpoint as state_dict directly...")
-    state_dict = checkpoint  # Directly assign if it's already a state_dict
+    state_dict = checkpoint
 else:
     raise TypeError(f"Unexpected checkpoint format: {type(checkpoint)}")
 
-# Load the state dictionary into the model
 model.model.load_state_dict(state_dict, strict=False)
-
 print("✅ Model weights loaded successfully!")
 
 # Initialize metrics
@@ -42,46 +34,26 @@ metric = MeanAveragePrecision(class_metrics=True)
 total_predictions = 0
 correct_predictions = 0
 
-# Define Tensor Transformations
-transform = transforms.Compose([
-    transforms.Resize((640, 640)),
-    transforms.ToTensor(),
-])
+# ✅ Resize & Pad Function (Newly Added)
+def resize_and_pad_image(img, target_size=(640, 640), padding_color=(114, 114, 114)):
+    """Resizes an image while preserving aspect ratio and pads it to the target size."""
+    original_w, original_h = img.size
+    target_w, target_h = target_size
 
-# Helper function: Non-Maximum Suppression
-def simple_nms(boxes, scores, iou_threshold=0):
-    """Applies Non-Maximum Suppression (NMS) to remove overlapping boxes."""
-    boxes = boxes.clone().detach()  # Avoid in-place modifications
-    scores = scores.clone().detach()
+    # Compute scaling ratio to maintain aspect ratio
+    ratio = min(target_w / original_w, target_h / original_h)
+    new_size = (int(original_w * ratio), int(original_h * ratio))
 
-    sorted_indices = torch.argsort(scores, descending=True)
-    keep = []
+    # Resize image while preserving aspect ratio
+    resized_img = img.resize(new_size, Image.BILINEAR)
 
-    while sorted_indices.numel() > 0:
-        current_idx = sorted_indices[0]
-        keep.append(current_idx.item())
+    # Create a new image with the target size and paste the resized image onto it
+    padded_img = Image.new("RGB", target_size, padding_color)
+    pad_x = (target_w - new_size[0]) // 2
+    pad_y = (target_h - new_size[1]) // 2
+    padded_img.paste(resized_img, (pad_x, pad_y))
 
-        if sorted_indices.numel() == 1:
-            break
-
-        current_box = boxes[current_idx].unsqueeze(0)
-        remaining_boxes = boxes[sorted_indices[1:]]
-
-        x1 = torch.max(current_box[:, 0], remaining_boxes[:, 0])
-        y1 = torch.max(current_box[:, 1], remaining_boxes[:, 1])
-        x2 = torch.min(current_box[:, 2], remaining_boxes[:, 2])
-        y2 = torch.min(current_box[:, 3], remaining_boxes[:, 3])
-
-        intersection = torch.clamp(x2 - x1, min=0) * torch.clamp(y2 - y1, min=0)
-        area_current = (current_box[:, 2] - current_box[:, 0]) * (current_box[:, 3] - current_box[:, 1])
-        area_remaining = (remaining_boxes[:, 2] - remaining_boxes[:, 0]) * (remaining_boxes[:, 3] - remaining_boxes[:, 1])
-        union = area_current + area_remaining - intersection
-        iou = intersection / (union + 1e-6)
-
-        mask = iou <= iou_threshold
-        sorted_indices = sorted_indices[1:][mask]
-
-    return keep
+    return padded_img, (pad_x, pad_y), ratio
 
 # Helper function: IoU Calculation
 def calculate_iou(box1, box2):
@@ -96,11 +68,13 @@ def calculate_iou(box1, box2):
 for image_path in os.listdir(image_dir):
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
     img_width, img_height = img.size
-    img_tensor = transform(img).unsqueeze(0)  # Add batch dimension
 
-    # Initial YOLO Predictions
+    # ✅ Apply resizing and padding
+    padded_img, (pad_x, pad_y), scale_ratio = resize_and_pad_image(img)
+
+    # YOLO Prediction
     with torch.no_grad():
-        results = model.predict(img_tensor, conf=conf_threshold,verbose = False)
+        results = model.predict(padded_img, conf=conf_threshold, verbose=False)
     result = results[0]
 
     # Load Ground Truth Labels
@@ -118,14 +92,17 @@ for image_path in os.listdir(image_dir):
                 true_labels.append(int(class_id))
 
     # Process Model Predictions
-    predictions = {
-        "boxes": [],
-        "scores": [],
-        "labels": []
-    }
+    predictions = {"boxes": [], "scores": [], "labels": []}
 
     for box in result.boxes:
-        predictions["boxes"].append(box.xyxy[0].cpu().numpy().tolist())
+        pred_box = box.xyxy[0].cpu().numpy().tolist()
+        # ✅ Convert YOLO predictions back to original image scale
+        pred_box[0] = (pred_box[0] - pad_x) / scale_ratio
+        pred_box[1] = (pred_box[1] - pad_y) / scale_ratio
+        pred_box[2] = (pred_box[2] - pad_x) / scale_ratio
+        pred_box[3] = (pred_box[3] - pad_y) / scale_ratio
+
+        predictions["boxes"].append(pred_box)
         predictions["scores"].append(box.conf.item())
         predictions["labels"].append(int(box.cls.item()))
 
@@ -134,7 +111,7 @@ for image_path in os.listdir(image_dir):
         boxes_tensor = torch.tensor(predictions["boxes"]).clone().detach()
         scores_tensor = torch.tensor(predictions["scores"]).clone().detach()
         labels_tensor = torch.tensor(predictions["labels"]).clone().detach()
-        keep_indices = simple_nms(boxes_tensor, scores_tensor, iou_threshold=0.25)
+        keep_indices = torch.ops.torchvision.nms(boxes_tensor, scores_tensor, iou_threshold)
 
         filtered_predictions = {
             "boxes": boxes_tensor[keep_indices].tolist(),
@@ -185,3 +162,4 @@ print(f"Precision: {correct_predictions / (total_predictions + 1e-7):.4f}")
 print(f"Recall: {final_metrics['mar_100'].mean():.4f}")
 print(f"Total Correct Predictions: {correct_predictions}")
 print(f"Total Predictions Made: {total_predictions}")
+
