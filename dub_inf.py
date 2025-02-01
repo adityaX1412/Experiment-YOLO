@@ -74,7 +74,7 @@ for image_path in os.listdir(image_dir):
 
     # YOLO Prediction
     with torch.no_grad():
-        results = model.predict(padded_img, conf=conf_threshold, verbose=False)
+        results = model.predict(padded_img, conf=0.1, verbose=False)
     result = results[0]
 
     # Load Ground Truth Labels
