@@ -103,7 +103,7 @@ for image_path in os.listdir(image_dir):
 
     # Initial YOLO Predictions
     with torch.no_grad():
-        results = model.predict(img_tensor, conf=conf_threshold)
+        results = model.predict(img_tensor, conf=conf_threshold,verbose = False)
     result = results[0]
 
     # Load Ground Truth Labels
