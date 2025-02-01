@@ -17,7 +17,7 @@ model_weights = "/kaggle/input/yolo-weights/weights/spdld.pt"
 conf_threshold = 0.1  # Lower for debugging, adjust as needed
 iou_threshold = 0.5
 
-model = YOLO("yolov8-ASF-P2.yaml")
+model = YOLO("yolov8-LD-P2.yaml")
 
 # Load the model checkpoint (not just weights)
 checkpoint = torch.load(model_weights,map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
