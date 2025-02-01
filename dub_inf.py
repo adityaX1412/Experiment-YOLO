@@ -133,7 +133,7 @@ for image_path in os.listdir(image_dir):
     # Load image and initial prediction
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
     img_width, img_height = img.size
-    initial_results = model.predict(img, conf=0.1)
+    initial_results = model.predict(img, conf=0.1,verbose = False)
     result = initial_results[0]
     
     # Load ground truth
