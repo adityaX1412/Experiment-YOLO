@@ -19,14 +19,23 @@ iou_threshold = 0.5
 
 model = YOLO("yolov8-ASF-P2.yaml")
 
-# Load state_dict safely
-state_dict = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+# Load the model checkpoint (not just weights)
+checkpoint = torch.load(model_weights,map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
-# If loading fails, check if state_dict is nested
-if "model" in state_dict:
-    state_dict = state_dict["model"]  # Extract actual weights if wrapped in a dictionary
+# Check if `checkpoint` is a full model object
+if isinstance(checkpoint, torch.nn.Module):
+    print("⚠️ Loaded full model instead of state_dict!")
+    state_dict = checkpoint.state_dict()  # Extract weights
+elif isinstance(checkpoint, dict) and "model" in checkpoint:
+    print("✅ Extracting state_dict from checkpoint dictionary...")
+    state_dict = checkpoint["model"].state_dict()  # Extract from wrapped model
+elif isinstance(checkpoint, dict):
+    print("✅ Using checkpoint as state_dict directly...")
+    state_dict = checkpoint  # Directly assign if it's already a state_dict
+else:
+    raise TypeError(f"Unexpected checkpoint format: {type(checkpoint)}")
 
-# Load weights into the model
+# Load the state dictionary into the model
 model.model.load_state_dict(state_dict, strict=False)
 
 print("✅ Model weights loaded successfully!")
