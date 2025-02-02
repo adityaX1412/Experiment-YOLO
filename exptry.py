@@ -8,7 +8,7 @@ import os
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Initialize a new W&B run
-wandb.init(project="yolov8_buck_patched")
+wandb.init(project="yolo_buck_patched_benchmarks")
 # Load the custom model configuration
 model = YOLO('yolov8n-ASF-P2.yaml')
 model.model.to(device)
@@ -36,13 +36,13 @@ Result_Final_model = model.train(
     epochs=70,
     batch=16,
     optimizer='SOAP',
-    project='yolov8_buck_patched',
+    project='yolo_buck_patched_benchmarks',
     save=True,
     imgsz = 1280,
     warmup_epochs = 5
 )
 # Define model and dataset names
-model_name = "yolov8_softspd"
+model_name = "yolov8n-ASF-P2"
 dataset_name = "bucktales-patched"
 
 # Save the model as .pth file in Kaggle workspace
