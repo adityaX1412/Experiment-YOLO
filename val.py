@@ -3,13 +3,14 @@ warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    model = YOLO('/kaggle/input/70-vanilla-soap/yolov8_softshare_waid (1).pt')
-    model.val(data='/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml',
+    model = YOLO('C:/Users/hemgo/Desktop/AI/best_yolov9t_bucktales_patched.pt')
+    model.val(data='C:/Users/hemgo/Desktop/AI/archive(1)_patched/dtc2023_local.yaml',
               split='test',
               imgsz=640,
               batch=16,
               # rect=False,
-              # save_json=True, # if you need to cal coco metrice
+              # save_json=True, # if you need to cal coco metrics
               project='runs/val',
-              name='yolov8m-ASF',
+              name='yolov9t-vanilla',
+              plots=True,
               )
