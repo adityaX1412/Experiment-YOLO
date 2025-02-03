@@ -109,19 +109,7 @@ checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch
 
 print("Checkpoint keys:", checkpoint.keys())
 
-for key, value in checkpoint.items():
-    if torch.is_tensor(value):  # Check if the value is a tensor
-        print(f"Key: {key}, Shape: {value.shape}")
-    elif isinstance(value, dict):  # Check if the value is a dictionary (e.g., 'model', 'optimizer')
-        print(f"Key: {key}, Type: dict")
-        for sub_key, sub_value in value.items():
-            if torch.is_tensor(sub_value):
-                print(f"  Sub-key: {sub_key}, Shape: {sub_value.shape}")
-            else:
-                print(f"  Sub-key: {sub_key}, Type: {type(sub_value)}")
-    else:  # For non-tensor values (e.g., int, str, etc.)
-        print(f"Key: {key}, Value: {value}, Type: {type(value)}")
-        
+
 # Extract the state dictionary correctly
 if isinstance(checkpoint, torch.nn.Module):
     print("⚠️ Loaded full model instead of state_dict! Extracting weights...")
@@ -134,6 +122,8 @@ elif isinstance(checkpoint, dict):
     state_dict = checkpoint  # Directly assign if it's already a state_dict
 else:
     raise TypeError(f"Unexpected checkpoint format: {type(checkpoint)}")
+
+model.model.load_state_dict(state_dict, strict=True)
 metric = MeanAveragePrecision(class_metrics=True)
 counta = 0
 
