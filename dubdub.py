@@ -107,6 +107,15 @@ model = YOLO("yolov8n-LD-P2.yaml")
 # Load checkpoint (full model or state_dict)
 checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
+print("Checkpoint keys:", checkpoint.keys())
+
+if 'state_dict' in checkpoint:
+    for key, value in checkpoint['state_dict'].items():
+        print(f"Key: {key}, Shape: {value.shape}")
+else:
+    for key, value in checkpoint.items():
+        print(f"Key: {key}, Shape: {value.shape}")
+
 # Extract the state dictionary correctly
 if isinstance(checkpoint, torch.nn.Module):
     print("⚠️ Loaded full model instead of state_dict! Extracting weights...")
