@@ -191,10 +191,10 @@ class BboxLoss(nn.Module):
         super().__init__()
         self.reg_max = reg_max
         self.use_dfl = use_dfl
-        self.nwd_loss = True
+        self.nwd_loss = False
         self.iou_ratio = 0.5
         
-        self.use_wiseiou = True
+        self.use_wiseiou = False
         
         if self.use_wiseiou:
             self.wiou_loss = WiseIouLoss(ltype='WIoU', monotonous=False, inner_iou=False, focaler_iou=False)

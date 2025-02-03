@@ -4,13 +4,13 @@ from ultralytics.engine.model import Model
 import torch
 import wandb
 import os
-import argparse
 # Check if CUDA is available and set the device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-wandb.init(project="yolov8_softshare")
+# Initialize a new W&B run
+wandb.init(project="yolo_buck_patched_benchmarks")
 # Load the custom model configuration
-model = YOLO('yolov8n-LD-P2.yaml')
+model = YOLO('yolov8n-ASF-P2.yaml')
 model.model.to(device)
 
 # Define a callback to log losses at the end of each training batch
@@ -32,17 +32,18 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml",
+    data="/kaggle/input/bucktales-patched/dtc2023.yaml",
     epochs=70,
-    batch=16,
-    imgsz = 640,
-    optimizer='auto',
-    project='yolov8_softshare',
+    batch=8,
+    optimizer='SOAP',
+    project='yolo_buck_patched_benchmarks',
     save=True,
+    imgsz = 1280,
+    warmup_epochs = 5
 )
 # Define model and dataset names
-model_name = "yolov8_spd"
-dataset_name = "waid_yolov8"
+model_name = "yolov8n-ASF-P2"
+dataset_name = "bucktales-patched"
 
 # Save the model as .pth file in Kaggle workspace
 save_path = f"/kaggle/working/models/{model_name}_{dataset_name}.pt"
