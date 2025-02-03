@@ -13,7 +13,7 @@ from torchmetrics.detection import MeanAveragePrecision
 #counting the next 3
 total_predictions = 0
 correct_predictions = 0
-iou_threshold = 0.5
+iou_threshold = 0.1
 
 def simple_nms(boxes, scores, iou_threshold=0):
     # Convert to tensor if needed
@@ -100,7 +100,7 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
 image_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 label_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 model_weights = "/kaggle/input/yolo-weights/weights/spdld.pt"
-conf_threshold = 0.7
+conf_threshold = 0.5
 
 # Load YOLO model
 model = YOLO("yolov8n-LD-P2.yaml")
@@ -131,7 +131,7 @@ for image_path in os.listdir(image_dir):
     # Load image and initial prediction
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
     img_width, img_height = img.size
-    initial_results = model.predict(img, conf=0.1, verbose=False)
+    initial_results = model.predict(img, conf=0.25, verbose=False)
     result = initial_results[0]
     
     # Load ground truth
