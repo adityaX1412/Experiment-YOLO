@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from PIL import Image
 from ultralytics import YOLO
+from ultralytics.nn.tasks import DetectionModel
 from torchmetrics.detection import MeanAveragePrecision
 
 # Constants
@@ -15,6 +16,7 @@ iou_threshold = 0.5  # 🔹 Increased NMS IoU threshold
 # Load YOLO model
 model = YOLO("yolov8n-LD-P2.yaml")
 # Load checkpoint (full model or state_dict)
+torch.serialization.add_safe_globals([DetectionModel])
 checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"), weights_only=True)
 
 # Extract the state dictionary correctly
