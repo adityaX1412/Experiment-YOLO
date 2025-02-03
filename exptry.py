@@ -34,7 +34,7 @@ model.add_callback('on_train_batch_end', log_losses)
 Result_Final_model = model.train(
     data="/kaggle/input/bucktales-patched/dtc2023.yaml",
     epochs=70,
-    batch=16,
+    batch=8,
     optimizer='SOAP',
     project='yolo_buck_patched_benchmarks',
     save=True,
