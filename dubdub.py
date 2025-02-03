@@ -100,7 +100,7 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
 image_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 label_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 model_weights = "/kaggle/input/yolo-weights/weights/spdld.pt"
-conf_threshold = 0.5
+conf_threshold = 0.1
 
 # Load YOLO model
 model = YOLO("yolov8n-LD-P2.yaml")
