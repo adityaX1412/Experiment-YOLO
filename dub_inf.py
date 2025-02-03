@@ -17,7 +17,7 @@ iou_threshold = 0.5  # 🔹 Increased NMS IoU threshold
 model = YOLO("yolov8n-LD-P2.yaml")
 # Load checkpoint (full model or state_dict)
 #torch.serialization.add_safe_globals([DetectionModel])
-checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"), weights_only=True)
+checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
 # Extract the state dictionary correctly
 if isinstance(checkpoint, torch.nn.Module):
