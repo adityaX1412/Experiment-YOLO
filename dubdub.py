@@ -4,25 +4,20 @@ import time
 import glob
 import numpy as np
 import torch
-import ultralytics.nn.modules.darts_utils
 from PIL import Image
 import logging
 import argparse
 import torch.nn as nn
-import ultralytics.nn.modules.genotypes
 import torch.utils
 import torchvision.datasets as dset
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
-from ultralytics.nn.modules.dataloader import YOLOObjectDetectionDataset, custom_collate_fn
-from ultralytics.nn.modules.darts_utils import YOLOLoss, process_yolov8_output
 from ultralytics import YOLO
 from ultralytics.utils.loss import DFLoss, BboxLoss
 import wandb
 import numpy as np
 import yaml
 from torch.autograd import Variable
-from ultralytics.utils.loss import v8DetectionLoss
 from torchmetrics.detection import MeanAveragePrecision
 
 #counting the next 3
