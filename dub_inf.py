@@ -15,7 +15,7 @@ iou_threshold = 0.5  # 🔹 Increased NMS IoU threshold
 # Load YOLO model
 model = YOLO("yolov8n-LD-P2.yaml")
 # Load checkpoint (full model or state_dict)
-checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"), weights_only=True)
 
 # Extract the state dictionary correctly
 if isinstance(checkpoint, torch.nn.Module):
@@ -31,7 +31,7 @@ else:
     raise TypeError(f"Unexpected checkpoint format: {type(checkpoint)}")
 
 # Load extracted state dictionary into the model
-model.model.load_state_dict(state_dict, strict=False)
+model.model.load_state_dict(state_dict, strict=True)
 print("✅ Model weights loaded successfully!")
 
 # Initialize metrics
