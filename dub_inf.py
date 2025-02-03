@@ -16,21 +16,21 @@ iou_threshold = 0.5  # 🔹 Increased NMS IoU threshold
 # Load YOLO model
 model = YOLO("yolov8n-LD-P2.yaml")
 # Load checkpoint (full model or state_dict)
-torch.serialization.add_safe_globals([DetectionModel])
+#torch.serialization.add_safe_globals([DetectionModel])
 checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"), weights_only=True)
 
 # Extract the state dictionary correctly
-if isinstance(checkpoint, torch.nn.Module):
-    print("⚠️ Loaded full model instead of state_dict! Extracting weights...")
-    state_dict = checkpoint.state_dict()  # Extract weights from full model
-elif isinstance(checkpoint, dict) and "model" in checkpoint:
-    print("✅ Extracting state_dict from checkpoint dictionary...")
-    state_dict = checkpoint["model"].state_dict()  # Extract wrapped model weights
-elif isinstance(checkpoint, dict):
-    print("✅ Using checkpoint as state_dict directly...")
-    state_dict = checkpoint  # Directly assign if it's already a state_dict
-else:
-    raise TypeError(f"Unexpected checkpoint format: {type(checkpoint)}")
+# if isinstance(checkpoint, torch.nn.Module):
+#     print("⚠️ Loaded full model instead of state_dict! Extracting weights...")
+#     state_dict = checkpoint.state_dict()  # Extract weights from full model
+# elif isinstance(checkpoint, dict) and "model" in checkpoint:
+#     print("✅ Extracting state_dict from checkpoint dictionary...")
+#     state_dict = checkpoint["model"].state_dict()  # Extract wrapped model weights
+# elif isinstance(checkpoint, dict):
+#     print("✅ Using checkpoint as state_dict directly...")
+#     state_dict = checkpoint  # Directly assign if it's already a state_dict
+# else:
+#     raise TypeError(f"Unexpected checkpoint format: {type(checkpoint)}")
 
 # Load extracted state dictionary into the model
 model.model.load_state_dict(state_dict, strict=True)
