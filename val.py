@@ -3,11 +3,11 @@ warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    model = YOLO('/kaggle/input/spd-no-soap/best (2).pt')
+    model = YOLO('/kaggle/input/bucktales-vanilla-with-soap/vanilla soap.pt')
     # /kaggle/input/yolo-weights/weights/spdnsoap.pt
-    model.val(data='/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml',
+    model.val(data='/kaggle/input/bucktales/dtc2023.yaml',
               split='test',
-              imgsz=640,
+              imgsz=1280,
               batch=16,
               # rect=False,
               # save_json=True, # if you need to cal coco metrice
