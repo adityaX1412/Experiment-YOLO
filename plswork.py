@@ -14,6 +14,8 @@ CONF_THRESHOLD = 0.5  # Threshold for high-confidence detections
 LOW_CONF_THRESHOLD = 0.25  # Trigger double inference if below this
 IOU_THRESHOLD = 0.1  # IoU matching threshold
 
+# Load YOLO model
+model = YOLO(MODEL_WEIGHTS)
 
 predictions_path = "/kaggle/input/waid-preds/predictions.json"  
 if not os.path.exists(predictions_path):
