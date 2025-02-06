@@ -89,7 +89,10 @@ for image_path in os.listdir(IMAGE_DIR):
                 true_labels.append(int(class_id))
 
     # Retrieve first inference results from `val()`
-    predictions = image_predictions
+    image_name = os.path.splitext(image_path)[0]
+    if image_name not in image_predictions:
+        continue
+    predictions = image_predictions[image_name]
 
     # Perform second inference on low-confidence detections
     replacement_candidates = []
