@@ -5,6 +5,7 @@ from PIL import Image
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
 import json
+from collections import defaultdict
 
 # Constants - Adjusted thresholds based on regular validation performance
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
