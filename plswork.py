@@ -136,6 +136,86 @@ def calculate_precision_recall(all_predictions, all_targets):
     
     return precision, recall
 
+def calculate_map50(predictions, targets, iou_threshold=0.5):
+    """
+    Calculate mAP@50 for each class and overall
+    """
+    class_aps = defaultdict(list)
+    
+    # Group by class
+    for preds, tgts in zip(predictions, targets):
+        pred_boxes = preds['boxes'].numpy()
+        pred_scores = preds['scores'].numpy()
+        pred_labels = preds['labels'].numpy()
+        true_boxes = tgts['boxes'].numpy()
+        true_labels = tgts['labels'].numpy()
+        
+        # Calculate AP for each class
+        unique_classes = np.unique(np.concatenate([pred_labels, true_labels]))
+        
+        for class_id in unique_classes:
+            # Get class-specific predictions and targets
+            class_pred_mask = pred_labels == class_id
+            class_true_mask = true_labels == class_id
+            
+            class_pred_boxes = pred_boxes[class_pred_mask]
+            class_pred_scores = pred_scores[class_pred_mask]
+            class_true_boxes = true_boxes[class_true_mask]
+            
+            if len(class_true_boxes) == 0:
+                continue
+                
+            # Sort predictions by confidence
+            score_sort = np.argsort(-class_pred_scores)
+            class_pred_boxes = class_pred_boxes[score_sort]
+            class_pred_scores = class_pred_scores[score_sort]
+            
+            # Calculate precision and recall points
+            tp = np.zeros(len(class_pred_boxes))
+            fp = np.zeros(len(class_pred_boxes))
+            matched_gt = set()
+            
+            for pred_idx, pred_box in enumerate(class_pred_boxes):
+                best_iou = iou_threshold
+                best_gt_idx = -1
+                
+                for gt_idx, gt_box in enumerate(class_true_boxes):
+                    if gt_idx in matched_gt:
+                        continue
+                    iou = calculate_iou(pred_box, gt_box)
+                    if iou > best_iou:
+                        best_iou = iou
+                        best_gt_idx = gt_idx
+                
+                if best_gt_idx >= 0:
+                    tp[pred_idx] = 1
+                    matched_gt.add(best_gt_idx)
+                else:
+                    fp[pred_idx] = 1
+            
+            # Compute precision and recall
+            cum_tp = np.cumsum(tp)
+            cum_fp = np.cumsum(fp)
+            recalls = cum_tp / len(class_true_boxes)
+            precisions = cum_tp / (cum_tp + cum_fp)
+            
+            # Compute AP using 11-point interpolation
+            ap = 0
+            for t in np.arange(0, 1.1, 0.1):
+                if np.sum(recalls >= t) == 0:
+                    p = 0
+                else:
+                    p = np.max(precisions[recalls >= t])
+                ap += p / 11
+            
+            class_aps[int(class_id)].append(ap)
+    
+    # Calculate mean AP for each class
+    mean_aps = {class_id: np.mean(aps) for class_id, aps in class_aps.items()}
+    map50 = np.mean(list(mean_aps.values()))
+    
+    return map50, mean_aps
+
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
 total_predictions = 0
@@ -224,9 +304,11 @@ for image_path in os.listdir(IMAGE_DIR):
 # Compute final metrics
 final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
+map50, class_aps = calculate_map50(all_predictions, all_targets)
 
 print(f"\nFinal Metrics:")
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
+print(f"Calculated mAP@50: {map50:.4f}")
 print(f"Precision: {precision:.4f}")
 print(f"Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
