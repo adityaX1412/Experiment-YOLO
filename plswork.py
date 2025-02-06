@@ -72,9 +72,9 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
         print(f"Scaling error: {str(e)}")
         return np.empty((0, 4))
 
-def validate_double_inference(model_path, data_yaml, split='val', imgsz=640, batch=16, 
+def validate_double_inference(model_path, data_yaml, split='test', imgsz=640, batch=16, 
                             conf_threshold=0.25, refinement_conf=0.1, nms_iou=0.5,
-                            project='runs/val', name='double-inference'):
+                            project='runs/test', name='double-inference'):
     """
     Custom validation function implementing double inference method
     """
