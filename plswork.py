@@ -298,8 +298,8 @@ def validate_double_inference(model_path, data_yaml, split='val', imgsz=640, bat
     return final_metrics
 
 if __name__ == '__main__':
-    model_path = '/kaggle/input/bucktale-weights/ssfflossp2soapvarifocal.pt'
-    data_yaml = '/kaggle/input/bucktales-patched/dtc2023.yaml'
+    model_path = '/kaggle/input/waid-no-soap/vanillanosoap.pt'
+    data_yaml = '/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml'
     
     validate_double_inference(
         model_path=model_path,
