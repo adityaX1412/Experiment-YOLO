@@ -19,7 +19,7 @@ model = YOLO(MODEL_WEIGHTS)
 
 # Run first pass validation
 val_results = model.val(
-    data=LABEL_DIR,  # Path to dataset yaml
+    data=DATA_YAML,  # Path to dataset yaml
     imgsz=640,
     batch=16,
     conf=LOW_CONF_THRESHOLD,  # Lower conf threshold to allow more detections for refinement
