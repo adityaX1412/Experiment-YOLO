@@ -6,14 +6,14 @@ from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
 import json
 
-# Constants
+# Constants - Adjusted thresholds based on regular validation performance
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
-CONF_THRESHOLD = 0.5  # Threshold for high-confidence detections
-LOW_CONF_THRESHOLD = 0.25  # Trigger double inference if below this
-IOU_THRESHOLD = 0.1  # IoU matching threshold
+CONF_THRESHOLD = 0.25  # Lowered to match YOLO's default
+IOU_THRESHOLD = 0.5    # Increased to standard COCO metric
+NMS_IOU_THRESHOLD = 0.45  # Added NMS threshold
 
 # Load YOLO model
 model = YOLO(MODEL_WEIGHTS)
@@ -26,21 +26,20 @@ if not os.path.exists(predictions_path):
 with open(predictions_path, "r") as f:
     val_predictions = json.load(f)
 
-# Convert JSON predictions into per-image format
-image_predictions = {}  # Stores detections for each image
+# Convert JSON predictions into per-image format with confidence filtering
+image_predictions = {}
 for pred in val_predictions:
-    image_name = pred["image_id"]  # Image filename
+    image_name = pred["image_id"]
     if image_name not in image_predictions:
         image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
-
-    # Convert COCO-style bbox (x, y, width, height) to YOLO format (x1, y1, x2, y2)
-    x, y, w, h = pred["bbox"]
-    x1, y1, x2, y2 = x, y, x + w, y + h
-
-    # Store extracted detections
-    image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
-    image_predictions[image_name]["scores"].append(pred["score"])
-    image_predictions[image_name]["labels"].append(pred["category_id"])
+    
+    # Only add predictions above confidence threshold
+    if pred["score"] >= CONF_THRESHOLD:
+        x, y, w, h = pred["bbox"]
+        x1, y1, x2, y2 = x, y, x + w, y + h
+        image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
+        image_predictions[image_name]["scores"].append(pred["score"])
+        image_predictions[image_name]["labels"].append(pred["category_id"])
 
 def calculate_iou(box1, box2):
     """Calculate Intersection over Union (IoU) between two boxes"""
@@ -55,18 +54,26 @@ def calculate_iou(box1, box2):
 
     return intersection / (area1 + area2 - intersection + 1e-6)
 
-def scale_boxes(boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop_coords):
-    """Rescales boxes to match the original image dimensions"""
-    if not isinstance(boxes, np.ndarray) or boxes.size == 0:
-        return np.empty((0, 4))
-
-    boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]] - pad_x, 0, crop_coords['resized_w'])
-    boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]] - pad_y, 0, crop_coords['resized_h'])
+def non_max_suppression(boxes, scores, labels, iou_threshold):
+    """Apply Non-Maximum Suppression to remove overlapping boxes"""
+    if len(boxes) == 0:
+        return [], [], []
     
-    boxes[:, [0, 2]] = boxes[:, [0, 2]] * resize_ratio_x + crop_coords['x1']
-    boxes[:, [1, 3]] = boxes[:, [1, 3]] * resize_ratio_y + crop_coords['y1']
+    indices = np.argsort(scores)[::-1]
+    boxes = np.array(boxes)
+    keep = []
 
-    return boxes
+    while indices.size > 0:
+        current = indices[0]
+        keep.append(current)
+        
+        if indices.size == 1:
+            break
+            
+        ious = np.array([calculate_iou(boxes[current], boxes[i]) for i in indices[1:]])
+        indices = indices[1:][ious < iou_threshold]
+
+    return boxes[keep].tolist(), [scores[i] for i in keep], [labels[i] for i in keep]
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
@@ -92,14 +99,26 @@ for image_path in os.listdir(IMAGE_DIR):
                 true_labels.append(int(class_id))
 
     # Get predictions for current image
-    image_name = os.path.splitext(image_path)[0]  # Remove file extension
+    image_name = os.path.splitext(image_path)[0]
     if image_name not in image_predictions:
-        continue  # Skip if no predictions for this image
-        
+        continue
+
     current_predictions = image_predictions[image_name]
+    
+    # Apply NMS to remove overlapping boxes
+    current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
+        non_max_suppression(
+            current_predictions['boxes'],
+            current_predictions['scores'],
+            current_predictions['labels'],
+            NMS_IOU_THRESHOLD
+        )
 
     # Update prediction counters
     total_predictions += len(current_predictions['boxes'])
+    
+    # Track matched ground truth boxes to avoid double-counting
+    matched_gt = set()
     
     # Check each prediction against ground truth
     for i, (pred_box, pred_score, pred_label) in enumerate(zip(
@@ -107,67 +126,23 @@ for image_path in os.listdir(IMAGE_DIR):
         current_predictions['scores'], 
         current_predictions['labels']
     )):
-        # Skip low confidence predictions
-        if pred_score < CONF_THRESHOLD:
-            continue
-            
-        # Check for matching ground truth box
-        for true_box, true_label in zip(true_boxes, true_labels):
-            iou = calculate_iou(pred_box, true_box)
-            if iou >= IOU_THRESHOLD and pred_label == true_label:
-                correct_predictions += 1
-                break
-
-    # Perform second inference on low-confidence detections
-    replacement_candidates = []
-    for i, score in enumerate(current_predictions['scores']):
-        if score >= CONF_THRESHOLD:
-            continue  # Skip high-confidence detections
-
-        # Adaptive cropping
-        pre_box = current_predictions['boxes'][i]
-        x1, y1, x2, y2 = pre_box
-        crop = img.crop((x1, y1, x2, y2)).resize((640, 640))
-
-        # Second pass inference
-        refined_results = model.predict(crop, conf=0.1, verbose=False)
-        refined_boxes = refined_results[0].boxes.xyxy.cpu().numpy()
-        refined_scores = refined_results[0].boxes.conf.cpu().numpy()
-        refined_labels = refined_results[0].boxes.cls.cpu().numpy().astype(int)
-
-        # Scale boxes back
-        scale_x, scale_y = (x2 - x1) / 640, (y2 - y1) / 640
-        scaled_boxes = refined_boxes * [scale_x, scale_y, scale_x, scale_y]
-
-        # Find best match
-        best_iou, best_conf, best_match = -1, -1, None
-        for j, refined_box in enumerate(scaled_boxes):
-            iou = calculate_iou(pre_box, refined_box)
-            if iou > best_iou or (iou == best_iou and refined_scores[j] > best_conf):
-                best_iou, best_conf, best_match = iou, refined_scores[j], refined_box
-
-        if best_match is not None and best_iou >= 0.25 and best_conf > score:
-            replacement_candidates.append({
-                'idx': i, 
-                'box': best_match.tolist(), 
-                'score': best_conf, 
-                'label': current_predictions['labels'][i]
-            })
-
-    # Apply replacements
-    for candidate in replacement_candidates:
-        i = candidate['idx']
-        current_predictions['boxes'][i] = candidate['box']
-        current_predictions['scores'][i] = candidate['score']
+        best_iou = 0
+        best_gt_idx = -1
         
-        # Recheck if the refined prediction is correct
-        pred_box = candidate['box']
-        pred_label = candidate['label']
-        for true_box, true_label in zip(true_boxes, true_labels):
+        # Find best matching ground truth box
+        for gt_idx, (true_box, true_label) in enumerate(zip(true_boxes, true_labels)):
+            if gt_idx in matched_gt:
+                continue
+                
             iou = calculate_iou(pred_box, true_box)
-            if iou >= IOU_THRESHOLD and pred_label == true_label:
-                correct_predictions += 1
-                break
+            if iou > best_iou and pred_label == true_label:
+                best_iou = iou
+                best_gt_idx = gt_idx
+        
+        # If good match found, count as correct and mark ground truth as matched
+        if best_iou >= IOU_THRESHOLD:
+            correct_predictions += 1
+            matched_gt.add(best_gt_idx)
 
     # Prepare for mAP evaluation
     preds = [{
