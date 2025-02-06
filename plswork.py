@@ -21,15 +21,23 @@ model = YOLO(MODEL_WEIGHTS)
 val_results = model.val(
     data=DATA_YAML,  # Path to dataset yaml
     imgsz=640,
-    batch=16,
-    conf=LOW_CONF_THRESHOLD,  # Lower conf threshold to allow more detections for refinement
+    batch=16,  # Lower conf threshold to allow more detections for refinement
     split='test',
-    iou=0.5,
     project="runs/val",
     name="yolov8n-spdld",
     save_json=True
 )
 
+val_predictions = {}  # Dictionary to store predictions per image
+
+for result in val_results:
+    image_name = result.path.split("/")[-1]
+    val_predictions[image_name] = {
+        'boxes': result.boxes.xyxy.cpu().numpy().tolist(),
+        'scores': result.boxes.conf.cpu().numpy().tolist(),
+        'labels': result.boxes.cls.cpu().numpy().tolist()
+    }
+    
 # Function to calculate IoU
 def calculate_iou(box1, box2):
     """Calculate Intersection over Union (IoU) between two boxes"""
@@ -63,14 +71,8 @@ metric = MeanAveragePrecision(class_metrics=True)
 total_predictions = 0
 correct_predictions = 0
 
-# Loop through images for second inference on low-confidence detections
 for image_path in os.listdir(IMAGE_DIR):
     img = Image.open(os.path.join(IMAGE_DIR, image_path)).convert("RGB")
-    img_width, img_height = img.size
-
-    # Run first inference
-    initial_results = val_results
-    result = initial_results[0]
 
     # Load ground truth labels
     true_boxes, true_labels = [], []
@@ -79,19 +81,15 @@ for image_path in os.listdir(IMAGE_DIR):
         with open(label_path, 'r') as f:
             for line in f.readlines():
                 class_id, x_center, y_center, width, height = map(float, line.strip().split())
-                x1 = (x_center - width/2) * img_width
-                y1 = (y_center - height/2) * img_height
-                x2 = (x_center + width/2) * img_width
-                y2 = (y_center + height/2) * img_height
+                x1 = (x_center - width/2) * img.width
+                y1 = (y_center - height/2) * img.height
+                x2 = (x_center + width/2) * img.width
+                y2 = (y_center + height/2) * img.height
                 true_boxes.append([x1, y1, x2, y2])
                 true_labels.append(int(class_id))
 
-    # Prepare first pass predictions
-    predictions = {'boxes': [], 'scores': [], 'labels': []}
-    for box in result.boxes:
-        predictions['boxes'].append(box.xyxy[0].cpu().numpy().tolist())
-        predictions['scores'].append(box.conf.item())
-        predictions['labels'].append(int(box.cls.item()))
+    # Retrieve first inference results from `val()`
+    predictions = val_predictions.get(image_path, {'boxes': [], 'scores': [], 'labels': []})
 
     # Perform second inference on low-confidence detections
     replacement_candidates = []
@@ -112,8 +110,7 @@ for image_path in os.listdir(IMAGE_DIR):
 
         # Scale boxes back
         scale_x, scale_y = (x2 - x1) / 640, (y2 - y1) / 640
-        scaled_boxes = scale_boxes(refined_boxes, 0, 0, scale_x, scale_y, 
-                                   {'x1': x1, 'y1': y1, 'resized_w': 640, 'resized_h': 640})
+        scaled_boxes = refined_boxes * [scale_x, scale_y, scale_x, scale_y]
 
         # Find best match
         best_iou, best_conf, best_match = -1, -1, None
