@@ -6,6 +6,7 @@ from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
 import json
 
+# Constants
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
@@ -17,14 +18,15 @@ IOU_THRESHOLD = 0.1  # IoU matching threshold
 # Load YOLO model
 model = YOLO(MODEL_WEIGHTS)
 
-predictions_path = "/kaggle/input/waid-preds/predictions.json"  
+# Load predictions
+predictions_path = "/kaggle/input/waid-preds/predictions.json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
 
 with open(predictions_path, "r") as f:
-    val_predictions = json.load(f)  # Load per-image detections
+    val_predictions = json.load(f)
 
-# 3️⃣ Convert JSON predictions into per-image format
+# Convert JSON predictions into per-image format
 image_predictions = {}  # Stores detections for each image
 for pred in val_predictions:
     image_name = pred["image_id"]  # Image filename
@@ -39,8 +41,7 @@ for pred in val_predictions:
     image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
     image_predictions[image_name]["scores"].append(pred["score"])
     image_predictions[image_name]["labels"].append(pred["category_id"])
-    
-# Function to calculate IoU
+
 def calculate_iou(box1, box2):
     """Calculate Intersection over Union (IoU) between two boxes"""
     x1 = max(box1[0], box2[0])
@@ -54,7 +55,6 @@ def calculate_iou(box1, box2):
 
     return intersection / (area1 + area2 - intersection + 1e-6)
 
-# Function to rescale bounding boxes after second inference
 def scale_boxes(boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop_coords):
     """Rescales boxes to match the original image dimensions"""
     if not isinstance(boxes, np.ndarray) or boxes.size == 0:
@@ -68,14 +68,15 @@ def scale_boxes(boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop_coords
 
     return boxes
 
-# Initialize mAP metric
+# Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
 total_predictions = 0
 correct_predictions = 0
 
+# Process each image
 for image_path in os.listdir(IMAGE_DIR):
     img = Image.open(os.path.join(IMAGE_DIR, image_path)).convert("RGB")
-
+    
     # Load ground truth labels
     true_boxes, true_labels = [], []
     label_path = os.path.join(LABEL_DIR, os.path.splitext(image_path)[0] + '.txt')
@@ -90,20 +91,41 @@ for image_path in os.listdir(IMAGE_DIR):
                 true_boxes.append([x1, y1, x2, y2])
                 true_labels.append(int(class_id))
 
-    # Retrieve first inference results from `val()`
-    image_name = os.path.splitext(image_path)[0]
+    # Get predictions for current image
+    image_name = os.path.splitext(image_path)[0]  # Remove file extension
     if image_name not in image_predictions:
-        continue
-    predictions = image_predictions[image_name]
+        continue  # Skip if no predictions for this image
+        
+    current_predictions = image_predictions[image_name]
+
+    # Update prediction counters
+    total_predictions += len(current_predictions['boxes'])
+    
+    # Check each prediction against ground truth
+    for i, (pred_box, pred_score, pred_label) in enumerate(zip(
+        current_predictions['boxes'], 
+        current_predictions['scores'], 
+        current_predictions['labels']
+    )):
+        # Skip low confidence predictions
+        if pred_score < CONF_THRESHOLD:
+            continue
+            
+        # Check for matching ground truth box
+        for true_box, true_label in zip(true_boxes, true_labels):
+            iou = calculate_iou(pred_box, true_box)
+            if iou >= IOU_THRESHOLD and pred_label == true_label:
+                correct_predictions += 1
+                break
 
     # Perform second inference on low-confidence detections
     replacement_candidates = []
-    for i, score in enumerate(predictions['scores']):
+    for i, score in enumerate(current_predictions['scores']):
         if score >= CONF_THRESHOLD:
             continue  # Skip high-confidence detections
 
         # Adaptive cropping
-        pre_box = predictions['boxes'][i]
+        pre_box = current_predictions['boxes'][i]
         x1, y1, x2, y2 = pre_box
         crop = img.crop((x1, y1, x2, y2)).resize((640, 640))
 
@@ -125,19 +147,33 @@ for image_path in os.listdir(IMAGE_DIR):
                 best_iou, best_conf, best_match = iou, refined_scores[j], refined_box
 
         if best_match is not None and best_iou >= 0.25 and best_conf > score:
-            replacement_candidates.append({'idx': i, 'box': best_match.tolist(), 'score': best_conf, 'label': predictions['labels'][i]})
+            replacement_candidates.append({
+                'idx': i, 
+                'box': best_match.tolist(), 
+                'score': best_conf, 
+                'label': current_predictions['labels'][i]
+            })
 
     # Apply replacements
     for candidate in replacement_candidates:
         i = candidate['idx']
-        predictions['boxes'][i] = candidate['box']
-        predictions['scores'][i] = candidate['score']
+        current_predictions['boxes'][i] = candidate['box']
+        current_predictions['scores'][i] = candidate['score']
+        
+        # Recheck if the refined prediction is correct
+        pred_box = candidate['box']
+        pred_label = candidate['label']
+        for true_box, true_label in zip(true_boxes, true_labels):
+            iou = calculate_iou(pred_box, true_box)
+            if iou >= IOU_THRESHOLD and pred_label == true_label:
+                correct_predictions += 1
+                break
 
     # Prepare for mAP evaluation
     preds = [{
-        'boxes': torch.tensor(predictions['boxes']),
-        'scores': torch.tensor(predictions['scores']),
-        'labels': torch.tensor(predictions['labels']),
+        'boxes': torch.tensor(current_predictions['boxes']),
+        'scores': torch.tensor(current_predictions['scores']),
+        'labels': torch.tensor(current_predictions['labels']),
     }]
     targets = [{
         'boxes': torch.tensor(true_boxes),
@@ -152,3 +188,5 @@ print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
 print(f"Precision: {final_metrics['map_per_class'].mean():.4f}")
 print(f"Recall: {final_metrics['mar_100'].mean():.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
+if total_predictions > 0:
+    print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
