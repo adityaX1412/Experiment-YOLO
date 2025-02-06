@@ -28,10 +28,10 @@ val_results = model.val(
     save_json=True
 )
 
-val_predictions = {}  # Dictionary to store predictions per image
+val_predictions = {}  # Stores detections for each image
 
-for result in val_results:
-    image_name = result.path.split("/")[-1]
+for result in model.results:  # `model.results` contains per-image detections
+    image_name = result.path.split("/")[-1]  # Get filename
     val_predictions[image_name] = {
         'boxes': result.boxes.xyxy.cpu().numpy().tolist(),
         'scores': result.boxes.conf.cpu().numpy().tolist(),
