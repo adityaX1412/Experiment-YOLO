@@ -4,8 +4,8 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
+import json
 
-# Constants
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
@@ -14,29 +14,29 @@ CONF_THRESHOLD = 0.5  # Threshold for high-confidence detections
 LOW_CONF_THRESHOLD = 0.25  # Trigger double inference if below this
 IOU_THRESHOLD = 0.1  # IoU matching threshold
 
-# Load YOLO model
-model = YOLO(MODEL_WEIGHTS)
 
-# Run first pass validation
-val_results = model.val(
-    data=DATA_YAML,  # Path to dataset yaml
-    imgsz=640,
-    batch=16,  # Lower conf threshold to allow more detections for refinement
-    split='test',
-    project="runs/val",
-    name="yolov8n-spdld",
-    save_json=True
-)
+predictions_path = "/kaggle/input/waid-preds/predictions.json"  
+if not os.path.exists(predictions_path):
+    raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
 
-val_predictions = {}  # Stores detections for each image
+with open(predictions_path, "r") as f:
+    val_predictions = json.load(f)  # Load per-image detections
 
-for result in model.results:  # `model.results` contains per-image detections
-    image_name = result.path.split("/")[-1]  # Get filename
-    val_predictions[image_name] = {
-        'boxes': result.boxes.xyxy.cpu().numpy().tolist(),
-        'scores': result.boxes.conf.cpu().numpy().tolist(),
-        'labels': result.boxes.cls.cpu().numpy().tolist()
-    }
+# 3️⃣ Convert JSON predictions into per-image format
+image_predictions = {}  # Stores detections for each image
+for pred in val_predictions:
+    image_name = pred["image_id"]  # Image filename
+    if image_name not in image_predictions:
+        image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
+
+    # Convert COCO-style bbox (x, y, width, height) to YOLO format (x1, y1, x2, y2)
+    x, y, w, h = pred["bbox"]
+    x1, y1, x2, y2 = x, y, x + w, y + h
+
+    # Store extracted detections
+    image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
+    image_predictions[image_name]["scores"].append(pred["score"])
+    image_predictions[image_name]["labels"].append(pred["category_id"])
     
 # Function to calculate IoU
 def calculate_iou(box1, box2):
@@ -89,7 +89,7 @@ for image_path in os.listdir(IMAGE_DIR):
                 true_labels.append(int(class_id))
 
     # Retrieve first inference results from `val()`
-    predictions = val_predictions.get(image_path, {'boxes': [], 'scores': [], 'labels': []})
+    predictions = image_predictions
 
     # Perform second inference on low-confidence detections
     replacement_candidates = []
