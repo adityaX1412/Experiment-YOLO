@@ -215,7 +215,7 @@ def calculate_map50(predictions, targets, iou_threshold=0.5):
     else:
         map50 = 0.0
     
-    return map50, mean_aps
+    return map50
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
@@ -305,7 +305,7 @@ for image_path in os.listdir(IMAGE_DIR):
 # Compute final metrics
 final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
-map50, class_aps = calculate_map50(all_predictions, all_targets)
+map50 = calculate_map50(all_predictions, all_targets)
 
 print(f"\nFinal Metrics:")
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
