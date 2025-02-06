@@ -69,7 +69,7 @@ for image_path in os.listdir(IMAGE_DIR):
     img_width, img_height = img.size
 
     # Run first inference
-    initial_results = model.predict(img, conf=LOW_CONF_THRESHOLD, verbose=False)
+    initial_results = val_results
     result = initial_results[0]
 
     # Load ground truth labels
