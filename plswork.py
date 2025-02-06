@@ -115,12 +115,10 @@ def calculate_precision_recall(all_predictions, all_targets):
             for j, (true_box, true_label) in enumerate(zip(true_boxes, true_labels)):
                 if j in matched_gt:
                     continue
-                    
-                if pred_label == true_label:
-                    iou = calculate_iou(pred_box, true_box)
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_gt_idx = j
+                iou = calculate_iou(pred_box, true_box)
+                if iou > best_iou and pred_label == true_label:
+                    best_iou = iou
+                    best_gt_idx = j
             
             if best_gt_idx >= 0:
                 total_tp += 1
@@ -212,8 +210,10 @@ def calculate_map50(predictions, targets, iou_threshold=0.5):
             class_aps[int(class_id)].append(ap)
     
     # Calculate mean AP for each class
-    mean_aps = {class_id: np.mean(aps) for class_id, aps in class_aps.items()}
-    map50 = np.mean(list(mean_aps.values()))
+    if len(class_aps) > 0:
+        map50 = np.mean([np.mean(aps) for class_id, aps in class_aps.items() if len(aps) > 0])
+    else:
+        map50 = 0.0
     
     return map50, mean_aps
 
