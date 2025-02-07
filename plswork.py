@@ -300,7 +300,7 @@ def perform_double_inference(image_path, model, original_detection):
 
     # Second pass inference
     with torch.no_grad():
-        new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD)
+        new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD,verbose=False)
     
     if len(new_results[0].boxes) == 0:
         return None
