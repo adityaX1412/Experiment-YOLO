@@ -11,9 +11,9 @@ IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
-CONF_THRESHOLD = 0.7 
-IOU_THRESHOLD = 0.7   
-NMS_IOU_THRESHOLD = 0.5
+CONF_THRESHOLD = 0.25
+IOU_THRESHOLD = 0.5 
+NMS_IOU_THRESHOLD = 0.4
 DOUBLE_INFERENCE_THRESHOLD = 0.1 
 
 model = YOLO(MODEL_WEIGHTS)
@@ -32,8 +32,8 @@ for pred in val_predictions:
     if image_name not in image_predictions:
         image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
     
-    # Only add predictions below confidence threshold
-    if pred["score"] <= CONF_THRESHOLD:
+    # Only add predictions above confidence threshold
+    if pred["score"] >= CONF_THRESHOLD:
         x, y, w, h = pred["bbox"]
         x1, y1, x2, y2 = x, y, x + w, y + h
         image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
@@ -300,7 +300,7 @@ def perform_double_inference(image_path, model, original_detection):
 
     # Second pass inference
     with torch.no_grad():
-        new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD,verbose=False)
+        new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD,verbose=False,augment=True)
     
     if len(new_results[0].boxes) == 0:
         return None
