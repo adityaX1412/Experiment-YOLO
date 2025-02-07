@@ -10,7 +10,7 @@ from collections import defaultdict
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
-MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdn  soap.pt"
+MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
 LOW_CONF_THRESHOLD = 0.25
 HIGH_CONF_THRESHOLD = 0.5
 IOU_THRESHOLD = 0.5 
