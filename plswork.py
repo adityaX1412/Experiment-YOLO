@@ -7,14 +7,15 @@ from torchmetrics.detection import MeanAveragePrecision
 import json
 from collections import defaultdict
 
-# Constants - Adjusted thresholds based on regular validation performance
+# Constants
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
-CONF_THRESHOLD = 0.7  # Lowered to match YOLO's default
+CONF_THRESHOLD = 0.5  # Lowered to match YOLO's default
 IOU_THRESHOLD = 0.5    # Increased to standard COCO metric
 NMS_IOU_THRESHOLD = 0.45  # Added NMS threshold
+DOUBLE_INFERENCE_THRESHOLD = 0.3  # Threshold for double inference
 
 # Load YOLO model
 model = YOLO(MODEL_WEIGHTS)
@@ -35,7 +36,7 @@ for pred in val_predictions:
         image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
     
     # Only add predictions above confidence threshold
-    if pred["score"] <= CONF_THRESHOLD:
+    if pred["score"] >= CONF_THRESHOLD:
         x, y, w, h = pred["bbox"]
         x1, y1, x2, y2 = x, y, x + w, y + h
         image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
@@ -211,88 +212,6 @@ def calculate_map(predictions, targets, iou_threshold):
     
     return map_value, mean_aps
 
-def calculate_map50(predictions, targets, iou_threshold=0.5):
-    """
-    Calculate mAP@50 for each class and overall
-    """
-    class_aps = defaultdict(list)
-    
-    # Group by class
-    for preds, tgts in zip(predictions, targets):
-        pred_boxes = preds['boxes'].numpy()
-        pred_scores = preds['scores'].numpy()
-        pred_labels = preds['labels'].numpy()
-        true_boxes = tgts['boxes'].numpy()
-        true_labels = tgts['labels'].numpy()
-        
-        # Calculate AP for each class
-        unique_classes = np.unique(np.concatenate([pred_labels, true_labels]))
-        
-        for class_id in unique_classes:
-            # Get class-specific predictions and targets
-            class_pred_mask = pred_labels == class_id
-            class_true_mask = true_labels == class_id
-            
-            class_pred_boxes = pred_boxes[class_pred_mask]
-            class_pred_scores = pred_scores[class_pred_mask]
-            class_true_boxes = true_boxes[class_true_mask]
-            
-            if len(class_true_boxes) == 0:
-                continue
-                
-            # Sort predictions by confidence
-            score_sort = np.argsort(-class_pred_scores)
-            class_pred_boxes = class_pred_boxes[score_sort]
-            class_pred_scores = class_pred_scores[score_sort]
-            
-            # Calculate precision and recall points
-            tp = np.zeros(len(class_pred_boxes))
-            fp = np.zeros(len(class_pred_boxes))
-            matched_gt = set()
-            
-            for pred_idx, pred_box in enumerate(class_pred_boxes):
-                best_iou = iou_threshold
-                best_gt_idx = -1
-                
-                for gt_idx, gt_box in enumerate(class_true_boxes):
-                    if gt_idx in matched_gt:
-                        continue
-                    iou = calculate_iou(pred_box, gt_box)
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_gt_idx = gt_idx
-                
-                if best_gt_idx >= 0:
-                    tp[pred_idx] = 1
-                    matched_gt.add(best_gt_idx)
-                else:
-                    fp[pred_idx] = 1
-            
-            # Compute precision and recall
-            cum_tp = np.cumsum(tp)
-            cum_fp = np.cumsum(fp)
-            recalls = cum_tp / len(class_true_boxes)
-            precisions = cum_tp / (cum_tp + cum_fp)
-            
-            # Compute AP using 11-point interpolation
-            ap = 0
-            for t in np.arange(0, 1.1, 0.1):
-                if np.sum(recalls >= t) == 0:
-                    p = 0
-                else:
-                    p = np.max(precisions[recalls >= t])
-                ap += p / 11
-            
-            class_aps[int(class_id)].append(ap)
-    
-    # Calculate mean AP for each class
-    if len(class_aps) > 0:
-        map50 = np.mean([np.mean(aps) for class_id, aps in class_aps.items() if len(aps) > 0])
-    else:
-        map50 = 0.0
-    
-    return map50
-
 def calculate_map50_95(predictions, targets):
     """Calculate mAP@50-95"""
     iou_thresholds = np.linspace(0.5, 0.95, 10)  # [0.5, 0.55, ..., 0.95]
@@ -317,6 +236,35 @@ def calculate_map50_95(predictions, targets):
     class_map50_95 = {class_id: np.mean(aps) for class_id, aps in class_maps.items()}
     
     return map50_95, maps[0], class_map50_95
+
+def perform_double_inference(image_path):
+    """Perform double inference on an image if initial predictions have low confidence"""
+    img = Image.open(image_path).convert("RGB")
+    
+    # First inference
+    results = model(img)
+    initial_predictions = results[0].boxes.data.cpu().numpy()
+    
+    # Check if maximum confidence is below the threshold
+    if len(initial_predictions) > 0 and np.max(initial_predictions[:, 4]) < DOUBLE_INFERENCE_THRESHOLD:
+        # Perform second inference
+        results = model(img)
+        second_predictions = results[0].boxes.data.cpu().numpy()
+        
+        # Combine predictions
+        combined_predictions = np.concatenate([initial_predictions, second_predictions], axis=0)
+    else:
+        combined_predictions = initial_predictions
+    
+    # Filter predictions by confidence threshold
+    filtered_predictions = combined_predictions[combined_predictions[:, 4] >= CONF_THRESHOLD]
+    
+    # Convert predictions to the required format
+    boxes = filtered_predictions[:, :4].tolist()
+    scores = filtered_predictions[:, 4].tolist()
+    labels = filtered_predictions[:, 5].astype(int).tolist()
+    
+    return boxes, scores, labels
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
@@ -346,9 +294,14 @@ for image_path in os.listdir(IMAGE_DIR):
     # Get predictions for current image
     image_name = os.path.splitext(image_path)[0]
     if image_name not in image_predictions:
-        continue
-
-    current_predictions = image_predictions[image_name]
+        # Perform double inference if no predictions or low confidence
+        current_predictions = {"boxes": [], "scores": [], "labels": []}
+        boxes, scores, labels = perform_double_inference(os.path.join(IMAGE_DIR, image_path))
+        current_predictions["boxes"] = boxes
+        current_predictions["scores"] = scores
+        current_predictions["labels"] = labels
+    else:
+        current_predictions = image_predictions[image_name]
     
     # Apply NMS to remove overlapping boxes
     current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
@@ -406,17 +359,14 @@ for image_path in os.listdir(IMAGE_DIR):
 # Compute final metrics
 final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
-map50 = calculate_map50(all_predictions, all_targets)
-map50_95, map50_new, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
+map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
 
 print(f"\nFinal Metrics:")
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
-print(f"Calculated mAP@50: {map50:.4f}")
-print(f"Calculated mAP@50 new: {map50_new:.4f}")
+print(f"Calculated mAP@50 : {map50:.4f}")
 print(f"Calculated mAP@50-95: {map50_95:.4f}")
 print(f"Precision: {precision:.4f}")
 print(f"Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
 if total_predictions > 0:
     print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
-
