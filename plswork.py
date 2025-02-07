@@ -7,20 +7,17 @@ from torchmetrics.detection import MeanAveragePrecision
 import json
 from collections import defaultdict
 
-# Constants
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
-CONF_THRESHOLD = 0.25  # Lowered to match YOLO's default
-IOU_THRESHOLD = 0.5    # Increased to standard COCO metric
-NMS_IOU_THRESHOLD = 0.45  # Added NMS threshold
-DOUBLE_INFERENCE_THRESHOLD = 0.3  # Threshold for double inference
+CONF_THRESHOLD = 0.7 
+IOU_THRESHOLD = 0.7   
+NMS_IOU_THRESHOLD = 0.5
+DOUBLE_INFERENCE_THRESHOLD = 0.1 
 
-# Load YOLO model
 model = YOLO(MODEL_WEIGHTS)
 
-# Load predictions
 predictions_path = "/kaggle/input/waid-preds/predictions.json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
@@ -36,7 +33,7 @@ for pred in val_predictions:
         image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
     
     # Only add predictions above confidence threshold
-    if pred["score"] >= CONF_THRESHOLD:
+    if pred["score"] <= CONF_THRESHOLD:
         x, y, w, h = pred["bbox"]
         x1, y1, x2, y2 = x, y, x + w, y + h
         image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
