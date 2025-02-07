@@ -13,7 +13,7 @@ LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
 CONF_THRESHOLD = 0.5  # Lowered to match YOLO's default
-IOU_THRESHOLD = 0.5    # Increased to standard COCO metric
+IOU_THRESHOLD = 0.1    # Increased to standard COCO metric
 NMS_IOU_THRESHOLD = 0.45  # Added NMS threshold
 
 # Load YOLO model
