@@ -12,5 +12,5 @@ if __name__ == '__main__':
               # rect=False,
               save_json=True, # if you need to cal coco metrice
               project='runs/val',
-              name='yolov8n-spdld',
+              name='yolov8n-spdn soap',
               )
