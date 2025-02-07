@@ -344,7 +344,7 @@ def perform_double_inference(image_path, model, original_detection):
     return best_match if best_conf > original_score else None
 
 # Initialize metrics
-metric = MeanAveragePrecision(class_metrics=True)
+metric = MeanAveragePrecision(class_metrics=True,extended_summary=True)
 total_predictions = 0
 correct_predictions = 0
 all_predictions = []
