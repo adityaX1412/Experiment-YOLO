@@ -11,8 +11,7 @@ IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
-LOW_CONF_THRESHOLD = 0.25
-HIGH_CONF_THRESHOLD = 0.5
+CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
 DOUBLE_INFERENCE_THRESHOLD = 0.1 
@@ -34,7 +33,7 @@ for pred in val_predictions:
         image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
     
     # Only add predictions above confidence threshold
-    if LOW_CONF_THRESHOLD <= pred["score"] < HIGH_CONF_THRESHOLD:
+    if CONF_THRESHOLD <= pred["score"]:
         x, y, w, h = pred["bbox"]
         x1, y1, x2, y2 = x, y, x + w, y + h
         image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
@@ -379,7 +378,7 @@ for image_path in os.listdir(IMAGE_DIR):
     # Process each prediction for potential refinement
     replacement_candidates = []
     for idx in range(len(current_predictions['scores'])):
-        if current_predictions['scores'][idx] >= HIGH_CONF_THRESHOLD:
+        if current_predictions['scores'][idx] >= CONF_THRESHOLD:
             continue
             
         # Create detection object matching JSON format
