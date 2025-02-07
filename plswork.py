@@ -1,20 +1,19 @@
 import os
+import json
 import torch
 import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
-import json
 from collections import defaultdict
 
-# Constants - Adjusted thresholds based on regular validation performance
+# Constants - Adjusted thresholds
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
-DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
 CONF_THRESHOLD = 0.25  # Lowered to match YOLO's default
-IOU_THRESHOLD = 0.5    # Increased to standard COCO metric
-NMS_IOU_THRESHOLD = 0.45  # Added NMS threshold
+IOU_THRESHOLD = 0.5    # Standard COCO metric
+NMS_IOU_THRESHOLD = 0.45  # Non-Maximum Suppression (NMS) threshold
 
 # Load YOLO model
 model = YOLO(MODEL_WEIGHTS)
@@ -55,167 +54,37 @@ def calculate_iou(box1, box2):
 
     return intersection / (area1 + area2 - intersection + 1e-6)
 
-def non_max_suppression(boxes, scores, labels, iou_threshold):
-    """Apply Non-Maximum Suppression to remove overlapping boxes"""
-    if len(boxes) == 0:
-        return [], [], []
-    
-    indices = np.argsort(scores)[::-1]
-    boxes = np.array(boxes)
-    keep = []
-
-    while indices.size > 0:
-        current = indices[0]
-        keep.append(current)
+def non_max_suppression_per_class(boxes, scores, labels, iou_threshold):
+    """Apply Non-Maximum Suppression per class to avoid suppressing different categories"""
+    unique_classes = np.unique(labels)
+    final_boxes, final_scores, final_labels = [], [], []
+    for cls in unique_classes:
+        cls_mask = (np.array(labels) == cls)
+        cls_boxes = np.array(boxes)[cls_mask]
+        cls_scores = np.array(scores)[cls_mask]
+        cls_labels = np.array(labels)[cls_mask]
         
-        if indices.size == 1:
-            break
-            
-        ious = np.array([calculate_iou(boxes[current], boxes[i]) for i in indices[1:]])
-        indices = indices[1:][ious < iou_threshold]
-
-    return boxes[keep].tolist(), [scores[i] for i in keep], [labels[i] for i in keep]
-
-def calculate_precision_recall(all_predictions, all_targets):
-    """
-    Calculate precision and recall across all images
-    """
-    total_tp = 0  # True positives
-    total_fp = 0  # False positives
-    total_fn = 0  # False negatives
-    
-    # Group predictions and targets by image
-    for preds, targets in zip(all_predictions, all_targets):
-        pred_boxes = preds['boxes']
-        pred_scores = preds['scores']
-        pred_labels = preds['labels']
-        true_boxes = targets['boxes']
-        true_labels = targets['labels']
-        
-        # Skip if no predictions or no ground truth
-        if len(pred_boxes) == 0 or len(true_boxes) == 0:
-            total_fn += len(true_boxes)  # All ground truths are false negatives
+        if len(cls_boxes) == 0:
             continue
-            
-        # Convert tensors to numpy for easier handling
-        pred_boxes = pred_boxes.numpy()
-        pred_labels = pred_labels.numpy()
-        true_boxes = true_boxes.numpy()
-        true_labels = true_labels.numpy()
         
-        # Track matched ground truth boxes
-        matched_gt = set()
+        indices = np.argsort(cls_scores)[::-1]
+        keep = []
         
-        # For each prediction, find best matching ground truth
-        for i, (pred_box, pred_label) in enumerate(zip(pred_boxes, pred_labels)):
-            best_iou = IOU_THRESHOLD
-            best_gt_idx = -1
+        while indices.size > 0:
+            current = indices[0]
+            keep.append(current)
             
-            # Find best matching ground truth box
-            for j, (true_box, true_label) in enumerate(zip(true_boxes, true_labels)):
-                if j in matched_gt:
-                    continue
-                iou = calculate_iou(pred_box, true_box)
-                if iou > best_iou and pred_label == true_label:
-                    best_iou = iou
-                    best_gt_idx = j
+            if indices.size == 1:
+                break
             
-            if best_gt_idx >= 0:
-                total_tp += 1
-                matched_gt.add(best_gt_idx)
-            else:
-                total_fp += 1
-        
-        # Count unmatched ground truth boxes as false negatives
-        total_fn += len(true_boxes) - len(matched_gt)
-    
-    # Calculate precision and recall
-    precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
-    recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
-    
-    return precision, recall
+            ious = np.array([calculate_iou(cls_boxes[current], cls_boxes[i]) for i in indices[1:]])
+            indices = indices[1:][ious < iou_threshold]
 
-def calculate_map50(predictions, targets, iou_threshold=0.5):
-    """
-    Calculate mAP@50 for each class and overall
-    """
-    class_aps = defaultdict(list)
-    
-    # Group by class
-    for preds, tgts in zip(predictions, targets):
-        pred_boxes = preds['boxes'].numpy()
-        pred_scores = preds['scores'].numpy()
-        pred_labels = preds['labels'].numpy()
-        true_boxes = tgts['boxes'].numpy()
-        true_labels = tgts['labels'].numpy()
-        
-        # Calculate AP for each class
-        unique_classes = np.unique(np.concatenate([pred_labels, true_labels]))
-        
-        for class_id in unique_classes:
-            # Get class-specific predictions and targets
-            class_pred_mask = pred_labels == class_id
-            class_true_mask = true_labels == class_id
-            
-            class_pred_boxes = pred_boxes[class_pred_mask]
-            class_pred_scores = pred_scores[class_pred_mask]
-            class_true_boxes = true_boxes[class_true_mask]
-            
-            if len(class_true_boxes) == 0:
-                continue
-                
-            # Sort predictions by confidence
-            score_sort = np.argsort(-class_pred_scores)
-            class_pred_boxes = class_pred_boxes[score_sort]
-            class_pred_scores = class_pred_scores[score_sort]
-            
-            # Calculate precision and recall points
-            tp = np.zeros(len(class_pred_boxes))
-            fp = np.zeros(len(class_pred_boxes))
-            matched_gt = set()
-            
-            for pred_idx, pred_box in enumerate(class_pred_boxes):
-                best_iou = iou_threshold
-                best_gt_idx = -1
-                
-                for gt_idx, gt_box in enumerate(class_true_boxes):
-                    if gt_idx in matched_gt:
-                        continue
-                    iou = calculate_iou(pred_box, gt_box)
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_gt_idx = gt_idx
-                
-                if best_gt_idx >= 0:
-                    tp[pred_idx] = 1
-                    matched_gt.add(best_gt_idx)
-                else:
-                    fp[pred_idx] = 1
-            
-            # Compute precision and recall
-            cum_tp = np.cumsum(tp)
-            cum_fp = np.cumsum(fp)
-            recalls = cum_tp / len(class_true_boxes)
-            precisions = cum_tp / (cum_tp + cum_fp)
-            
-            # Compute AP using 11-point interpolation
-            ap = 0
-            for t in np.arange(0, 1.1, 0.1):
-                if np.sum(recalls >= t) == 0:
-                    p = 0
-                else:
-                    p = np.max(precisions[recalls >= t])
-                ap += p / 11
-            
-            class_aps[int(class_id)].append(ap)
-    
-    # Calculate mean AP for each class
-    if len(class_aps) > 0:
-        map50 = np.mean([np.mean(aps) for class_id, aps in class_aps.items() if len(aps) > 0])
-    else:
-        map50 = 0.0
-    
-    return map50
+        final_boxes.extend(cls_boxes[keep])
+        final_scores.extend(cls_scores[keep])
+        final_labels.extend(cls_labels[keep])
+
+    return final_boxes, final_scores, final_labels
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
@@ -249,16 +118,16 @@ for image_path in os.listdir(IMAGE_DIR):
 
     current_predictions = image_predictions[image_name]
     
-    # Apply NMS to remove overlapping boxes
+    # Apply class-aware NMS
     current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
-        non_max_suppression(
+        non_max_suppression_per_class(
             current_predictions['boxes'],
             current_predictions['scores'],
             current_predictions['labels'],
             NMS_IOU_THRESHOLD
         )
 
-    # Update prediction counters
+    # Update total predictions AFTER NMS
     total_predictions += len(current_predictions['boxes'])
     
     # Track matched ground truth boxes to avoid double-counting
@@ -283,7 +152,7 @@ for image_path in os.listdir(IMAGE_DIR):
                 best_iou = iou
                 best_gt_idx = gt_idx
         
-        # If good match found, count as correct and mark ground truth as matched
+        # If good match found, count as correct
         if best_iou >= IOU_THRESHOLD:
             correct_predictions += 1
             matched_gt.add(best_gt_idx)
@@ -304,14 +173,15 @@ for image_path in os.listdir(IMAGE_DIR):
 
 # Compute final metrics
 final_metrics = metric.compute()
-precision, recall = calculate_precision_recall(all_predictions, all_targets)
-map50 = calculate_map50(all_predictions, all_targets)
+precision = correct_predictions / (total_predictions + 1e-6)
+recall = correct_predictions / (len(all_targets) + 1e-6)
+map50 = final_metrics['map_50'].item()
 
 print(f"\nFinal Metrics:")
-print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
-print(f"Calculated mAP@50: {map50:.4f}")
+print(f"mAP@0.5: {map50:.4f}")
 print(f"Precision: {precision:.4f}")
 print(f"Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
 if total_predictions > 0:
     print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
+
