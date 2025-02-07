@@ -237,34 +237,114 @@ def calculate_map50_95(predictions, targets):
     
     return map50_95, maps[0], class_map50_95
 
-def perform_double_inference(image_path):
-    """Perform double inference on an image if initial predictions have low confidence"""
-    img = Image.open(image_path).convert("RGB")
-    
-    # First inference
-    results = model(img)
-    initial_predictions = results[0].boxes.data.cpu().numpy()
-    
-    # Check if maximum confidence is below the threshold
-    if len(initial_predictions) > 0 and np.max(initial_predictions[:, 4]) < DOUBLE_INFERENCE_THRESHOLD:
-        # Perform second inference
-        results = model(img)
-        second_predictions = results[0].boxes.data.cpu().numpy()
+def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop_coords):
+    """Always returns a numpy array with proper dimensions"""
+    try:
+        # Handle null/empty inputs
+        if padded_boxes is None or not isinstance(padded_boxes, np.ndarray):
+            return np.empty((0, 4))
         
-        # Combine predictions
-        combined_predictions = np.concatenate([initial_predictions, second_predictions], axis=0)
-    else:
-        combined_predictions = initial_predictions
+        # Ensure 2D array format
+        if padded_boxes.size == 0:
+            return np.empty((0, 4))
+        if padded_boxes.ndim == 1:
+            padded_boxes = np.expand_dims(padded_boxes, 0)
+            
+        # Perform coordinate transformations
+        boxes = padded_boxes.copy()
+        boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]] - pad_x, 0, crop_coords['resized_w'])
+        boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]] - pad_y, 0, crop_coords['resized_h'])
+        
+        boxes[:, [0, 2]] = boxes[:, [0, 2]] * resize_ratio_x + crop_coords['x1']
+        boxes[:, [1, 3]] = boxes[:, [1, 3]] * resize_ratio_y + crop_coords['y1']
+        
+        return boxes
+    except Exception as e:
+        print(f"Scaling error: {str(e)}")
+        return np.empty((0, 4))
+
+def perform_double_inference(image_path, model, original_detection):
+    """Perform double inference with same transformations as your existing code"""
+    img = Image.open(image_path).convert("RGB")
+    img_width, img_height = img.size
     
-    # Filter predictions by confidence threshold
-    filtered_predictions = combined_predictions[combined_predictions[:, 4] >= CONF_THRESHOLD]
+    # Extract detection details from JSON prediction
+    x1, y1, x2, y2 = original_detection['bbox']
+    sw = x2 - x1
+    sh = y2 - y1
+    original_score = original_detection['score']
+    original_label = original_detection['category_id']
     
-    # Convert predictions to the required format
-    boxes = filtered_predictions[:, :4].tolist()
-    scores = filtered_predictions[:, 4].tolist()
-    labels = filtered_predictions[:, 5].astype(int).tolist()
+    # Adaptive crop calculations (same as your code)
+    cx, cy = (x1 + x2)/2, (y1 + y2)/2
+    desired_width = (sw * 640) / (x2 - x1) if (x2 - x1) != 0 else 640
+    desired_height = (sh * 640) / (y2 - y1) if (y2 - y1) != 0 else 640
     
-    return boxes, scores, labels
+    # Expand ROI with boundary checks
+    new_x1 = max(0, int(cx - desired_width/2))
+    new_y1 = max(0, int(cy - desired_height/2))
+    new_x2 = min(img_width, int(cx + desired_width/2))
+    new_y2 = min(img_height, int(cy + desired_height/2))
+    
+    if (new_x2 <= new_x1) or (new_y2 <= new_y1):
+        return None
+
+    # Aspect ratio-preserving resize and padding
+    crop = img.crop((new_x1, new_y1, new_x2, new_y2))
+    original_w, original_h = crop.size
+    ratio = min(640/original_w, 640/original_h)
+    new_size = (int(original_w*ratio), int(original_h*ratio))
+    resized = crop.resize(new_size, Image.BILINEAR)
+    
+    # Pad to 640x640
+    padded_img = Image.new("RGB", (640, 640), (114, 114, 114))
+    pad_x, pad_y = (640 - new_size[0])//2, (640 - new_size[1])//2
+    padded_img.paste(resized, (pad_x, pad_y))
+
+    # Second pass inference
+    with torch.no_grad():
+        new_results = model.predict(padded_img, conf=0.1)
+    
+    if len(new_results[0].boxes) == 0:
+        return None
+
+    # Process and scale detections
+    boxes = new_results[0].boxes.xyxy.cpu().numpy()
+    if boxes.ndim == 1:
+        boxes = np.expand_dims(boxes, axis=0)
+        
+    confs = new_results[0].boxes.conf.cpu().numpy()
+    labels = new_results[0].boxes.cls.cpu().numpy().astype(int)
+    
+    # Scale boxes using your existing function
+    scale_x = (new_x2 - new_x1) / new_size[0]
+    scale_y = (new_y2 - new_y1) / new_size[1]
+    
+    scaled_boxes = scale_boxes(
+        boxes.copy(), pad_x, pad_y, scale_x, scale_y,
+        {'x1': new_x1, 'y1': new_y1, 
+         'resized_w': new_size[0], 'resized_h': new_size[1]}
+    )
+    
+    best_match = None
+    best_conf = -1
+    best_iou = -1
+    
+    for box, label, conf in zip(scaled_boxes, labels, confs):
+        if label != original_label:
+            continue
+            
+        current_iou = calculate_iou([x1, y1, x2, y2], box)
+        if conf > best_conf and current_iou >= 0.25:
+            best_conf = conf
+            best_iou = current_iou
+            best_match = {
+                'bbox': box.tolist(),
+                'score': conf,
+                'category_id': label
+            }
+    
+    return best_match if best_conf > original_score else None
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True)
@@ -294,14 +374,44 @@ for image_path in os.listdir(IMAGE_DIR):
     # Get predictions for current image
     image_name = os.path.splitext(image_path)[0]
     if image_name not in image_predictions:
-        # Perform double inference if no predictions or low confidence
-        current_predictions = {"boxes": [], "scores": [], "labels": []}
-        boxes, scores, labels = perform_double_inference(os.path.join(IMAGE_DIR, image_path))
-        current_predictions["boxes"] = boxes
-        current_predictions["scores"] = scores
-        current_predictions["labels"] = labels
-    else:
-        current_predictions = image_predictions[image_name]
+        continue
+        
+    current_predictions = image_predictions[image_name]
+    
+    # Process each prediction for potential refinement
+    replacement_candidates = []
+    for idx in range(len(current_predictions['scores'])):
+        if current_predictions['scores'][idx] >= CONF_THRESHOLD:
+            continue
+            
+        # Create detection object matching JSON format
+        original_detection = {
+            'bbox': current_predictions['boxes'][idx],
+            'score': current_predictions['scores'][idx],
+            'category_id': current_predictions['labels'][idx]
+        }
+        
+        # Perform double inference
+        refined = perform_double_inference(
+            os.path.join(IMAGE_DIR, image_path),
+            model,
+            original_detection
+        )
+        
+        if refined:
+            replacement_candidates.append({
+                'idx': idx,
+                'bbox': refined['bbox'],
+                'score': refined['score'],
+                'label': refined['category_id']
+            })
+    
+    # Apply replacements
+    for candidate in replacement_candidates:
+        i = candidate['idx']
+        current_predictions['boxes'][i] = candidate['bbox']
+        current_predictions['scores'][i] = candidate['score']
+        current_predictions['labels'][i] = candidate['label']
     
     # Apply NMS to remove overlapping boxes
     current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
