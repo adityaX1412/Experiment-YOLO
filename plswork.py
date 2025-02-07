@@ -32,7 +32,7 @@ for pred in val_predictions:
     if image_name not in image_predictions:
         image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
     
-    # Only add predictions above confidence threshold
+    # Only add predictions below confidence threshold
     if pred["score"] <= CONF_THRESHOLD:
         x, y, w, h = pred["bbox"]
         x1, y1, x2, y2 = x, y, x + w, y + h
