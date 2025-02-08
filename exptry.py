@@ -32,7 +32,7 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="/kaggle/input/bucktales-patched/dtc2023.yaml",
+    data="/content/drive/MyDrive/waid_new/WAID_dataset/WAID-main/WAID/data.yaml",
     epochs=70,
     batch=8,
     optimizer='SOAP',
