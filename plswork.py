@@ -3,9 +3,96 @@ import torch
 import numpy as np
 from PIL import Image
 from ultralytics import YOLO
-from torchmetrics.detection import MeanAveragePrecision
-import json
-from collections import defaultdict
+import time
+import matplotlib.pyplot as plt
+import seaborn as sns
+from thop import profile
+import pandas as pd
+
+# Add these to your existing constants
+OUTPUT_DIR = "/kaggle/working/"
+BATCH_SIZE = 1
+NUM_WARMUP = 10
+NUM_TRIALS = 100
+
+def calculate_inference_metrics(model, image_path):
+    """Calculate inference time and GFLOPS for a single image"""
+    device = next(model.parameters()).device
+    img = Image.open(image_path).convert("RGB")
+    img = torch.from_numpy(np.array(img)).to(device).permute(2, 0, 1).float() / 255.0
+    img = img.unsqueeze(0)  # Add batch dimension
+    
+    # Warmup runs
+    for _ in range(NUM_WARMUP):
+        with torch.no_grad():
+            _ = model(img)
+    
+    # Measure inference time
+    torch.cuda.synchronize()
+    start_time = time.perf_counter()
+    
+    for _ in range(NUM_TRIALS):
+        with torch.no_grad():
+            _ = model(img)
+    
+    torch.cuda.synchronize()
+    end_time = time.perf_counter()
+    
+    avg_inference_time = (end_time - start_time) / NUM_TRIALS
+    
+    # Calculate GFLOPS
+    macs, params = profile(model, inputs=(img,))
+    gflops = macs * 2 / 1e9  # Convert MACs to GFLOPS
+    
+    return avg_inference_time, gflops, params
+
+def create_visualizations(predictions, metrics_data):
+    """Create and save various visualization plots"""
+    
+    # 1. Confidence Distribution
+    plt.figure(figsize=(10, 6))
+    confidences = [pred['score'] for pred in val_predictions]
+    plt.hist(confidences, bins=50, alpha=0.75)
+    plt.title('Distribution of Detection Confidences')
+    plt.xlabel('Confidence Score')
+    plt.ylabel('Count')
+    plt.savefig(os.path.join(OUTPUT_DIR, 'confidence_distribution.png'))
+    plt.close()
+    
+    # 2. Class Distribution
+    plt.figure(figsize=(10, 6))
+    classes = [pred['category_id'] for pred in val_predictions]
+    class_counts = pd.Series(classes).value_counts()
+    sns.barplot(x=class_counts.index, y=class_counts.values)
+    plt.title('Distribution of Detected Classes')
+    plt.xlabel('Class ID')
+    plt.ylabel('Count')
+    plt.savefig(os.path.join(OUTPUT_DIR, 'class_distribution.png'))
+    plt.close()
+    
+    # 3. Precision-Recall Curve
+    plt.figure(figsize=(10, 6))
+    precisions = metrics_data['precision']
+    recalls = metrics_data['recall']
+    plt.plot(recalls, precisions)
+    plt.title('Precision-Recall Curve')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.grid(True)
+    plt.savefig(os.path.join(OUTPUT_DIR, 'precision_recall_curve.png'))
+    plt.close()
+    
+    # 4. Per-class mAP
+    plt.figure(figsize=(12, 6))
+    class_maps = metrics_data['class_map50_95']
+    classes = list(class_maps.keys())
+    maps = list(class_maps.values())
+    sns.barplot(x=classes, y=maps)
+    plt.title('Per-class mAP@50-95')
+    plt.xlabel('Class ID')
+    plt.ylabel('mAP')
+    plt.savefig(os.path.join(OUTPUT_DIR, 'per_class_map.png'))
+    plt.close()
 
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
@@ -480,3 +567,65 @@ print(f"calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
 if total_predictions > 0:
     print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
+
+# Add this to your main execution code after loading the model
+print("\nCalculating inference metrics...")
+total_inference_time = 0
+total_gflops = 0
+inference_times = []
+image_count = 0
+
+# Sample a subset of images for inference timing
+sample_size = min(10, len(os.listdir(IMAGE_DIR)))
+sampled_images = np.random.choice(os.listdir(IMAGE_DIR), sample_size, replace=False)
+
+for image_path in sampled_images:
+    full_path = os.path.join(IMAGE_DIR, image_path)
+    inf_time, gflops, params = calculate_inference_metrics(model, full_path)
+    total_inference_time += inf_time
+    total_gflops += gflops
+    inference_times.append(inf_time)
+    image_count += 1
+    
+    if image_count % 10 == 0:
+        print(f"Processed {image_count}/{sample_size} images")
+
+avg_inference_time = total_inference_time / image_count
+avg_gflops = total_gflops / image_count
+
+print(f"\nInference Metrics:")
+print(f"Average Inference Time: {avg_inference_time*1000:.2f} ms")
+print(f"Average GFLOPS: {avg_gflops:.2f}")
+print(f"Model Parameters: {params/1e6:.2f}M")
+
+# Calculate inference FPS
+fps = 1.0 / avg_inference_time
+print(f"Inference FPS: {fps:.2f}")
+
+# Create standard deviation and percentile metrics for inference time
+inf_std = np.std(inference_times)
+inf_p95 = np.percentile(inference_times, 95)
+print(f"Inference Time Std Dev: {inf_std*1000:.2f} ms")
+print(f"95th Percentile Inference Time: {inf_p95*1000:.2f} ms")
+
+# Collect metrics for visualization
+metrics_data = {
+    'precision': precision,
+    'recall': recall,
+    'class_map50_95': class_map50_95
+}
+
+# Create and save visualizations
+print("\nGenerating visualizations...")
+create_visualizations(val_predictions, metrics_data)
+print("Visualizations saved to output directory")
+
+# Save metrics to CSV
+metrics_df = pd.DataFrame({
+    'Metric': ['mAP@50', 'mAP@50-95', 'Precision', 'Recall', 'Avg Inference Time (ms)', 
+               'Avg GFLOPS', 'FPS', 'Parameters (M)'],
+    'Value': [map50, map50_95, precision, recall, avg_inference_time*1000, 
+              avg_gflops, fps, params/1e6]
+})
+metrics_df.to_csv(os.path.join(OUTPUT_DIR, 'model_metrics.csv'), index=False)
+print("Metrics saved to model_metrics.csv")
