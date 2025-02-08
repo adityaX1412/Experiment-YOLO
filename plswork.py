@@ -9,7 +9,7 @@ import seaborn as sns
 from thop import profile
 import pandas as pd
 import json
-from torch.detection import MeanAveragePrecision
+from torchmetrics.detection import MeanAveragePrecision
 from collections import defaultdict
 # Add these to your existing constants
 OUTPUT_DIR = "/kaggle/working/"
