@@ -280,6 +280,18 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
         print(f"Scaling error: {str(e)}")
         return np.empty((0, 4))
 
+VISUALIZATION_DIR = "visualizations"
+INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
+FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
+
+# Create visualization directories if they don't exist
+os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
+os.makedirs(FINAL_VIS_DIR, exist_ok=True)
+
+# Add tracking variables for inference statistics
+inference_times = []
+gflops_values = []
+
 def perform_double_inference(image_path, model, original_detection):
     """Perform double inference with inference time, GFLOPs, and visualizations."""
     img = Image.open(image_path).convert("RGB")
@@ -324,6 +336,7 @@ def perform_double_inference(image_path, model, original_detection):
     try:
         flops, params = profile(model, inputs=(input_tensor,))
         gflops = flops / 1e9  # Convert FLOPs to GFLOPs
+        gflops_values.append(gflops)
     except Exception as e:
         print(f"⚠️ GFLOPs computation error: {str(e)}")
         gflops = None
@@ -333,6 +346,7 @@ def perform_double_inference(image_path, model, original_detection):
     with torch.no_grad():
         new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD, verbose=False, augment=True)
     inference_time = (time.time() - start_time) * 1000  # Convert to ms
+    inference_times.append(inference_time)
     
     if len(new_results[0].boxes) == 0:
         return None
@@ -386,12 +400,36 @@ def perform_double_inference(image_path, model, original_detection):
         axes[1].add_patch(plt.Rectangle((bx1, by1), bx2 - bx1, by2 - by1, fill=False, edgecolor='blue', linewidth=2))
     axes[1].set_title("Double Inference Image")
     
-    plt.show()
+    # Save visualizations
+    base_name = os.path.splitext(os.path.basename(image_path))[0]
+    plt.savefig(os.path.join(FINAL_VIS_DIR, f'{base_name}_comparison.jpg'))
+    plt.close()
+
+    # Save individual images
+    img_with_box = img.copy()
+    plt.figure()
+    plt.imshow(img_with_box)
+    plt.gca().add_patch(plt.Rectangle((x1, y1), sw, sh, fill=False, edgecolor='red', linewidth=2))
+    plt.axis('off')
+    plt.savefig(os.path.join(INITIAL_VIS_DIR, f'{base_name}_initial.jpg'), bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+    processed_img = padded_img.copy()
+    plt.figure()
+    plt.imshow(processed_img)
+    for box in scaled_boxes:
+        bx1, by1, bx2, by2 = box
+        plt.gca().add_patch(plt.Rectangle((bx1, by1), bx2 - bx1, by2 - by1, fill=False, edgecolor='blue', linewidth=2))
+    plt.axis('off')
+    plt.savefig(os.path.join(FINAL_VIS_DIR, f'{base_name}_final.jpg'), bbox_inches='tight', pad_inches=0)
+    plt.close()
 
     logger.info(f"⏱️ Inference Time: {inference_time:.2f} ms")
     logger.info(f"⚡ GFLOPs: {gflops:.2f}" if gflops else "⚠️ GFLOPs computation failed.")
 
     return best_match if best_conf > original_score else None
+
+
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True,extended_summary=True)
@@ -517,7 +555,14 @@ for image_path in os.listdir(IMAGE_DIR):
 final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
 map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
+# Add this at the end of your script, after all processing is done
+if inference_times:
+    avg_inference_time = sum(inference_times) / len(inference_times)
+    print(f"\nAverage Inference Time: {avg_inference_time:.2f} ms")
 
+if gflops_values:
+    avg_gflops = sum(gflops_values) / len(gflops_values)
+    print(f"Average GFLOPs: {avg_gflops:.2f}")
 print(f"\nFinal Metrics:")
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
 print(f"Calculated mAP@50 : {map50:.4f}")
