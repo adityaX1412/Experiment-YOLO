@@ -127,6 +127,67 @@ model.model.load_state_dict(state_dict, strict=True)
 metric = MeanAveragePrecision(class_metrics=True)
 counta = 0
 
+def calculate_precision_recall(all_predictions, all_targets):
+    """
+    Calculate precision and recall across all images
+    """
+    total_tp = 0  # True positives
+    total_fp = 0  # False positives
+    total_fn = 0  # False negatives
+    
+    # Group predictions and targets by image
+    for preds, targets in zip(all_predictions, all_targets):
+        pred_boxes = preds['boxes']
+        pred_scores = preds['scores']
+        pred_labels = preds['labels']
+        true_boxes = targets['boxes']
+        true_labels = targets['labels']
+        
+        # Skip if no predictions or no ground truth
+        if len(pred_boxes) == 0 or len(true_boxes) == 0:
+            total_fn += len(true_boxes)  # All ground truths are false negatives
+            continue
+            
+        # Convert tensors to numpy for easier handling
+        pred_boxes = pred_boxes.numpy()
+        pred_labels = pred_labels.numpy()
+        true_boxes = true_boxes.numpy()
+        true_labels = true_labels.numpy()
+        
+        # Track matched ground truth boxes
+        matched_gt = set()
+        
+        # For each prediction, find best matching ground truth
+        for i, (pred_box, pred_label) in enumerate(zip(pred_boxes, pred_labels)):
+            best_iou = IOU_THRESHOLD
+            best_gt_idx = -1
+            
+            # Find best matching ground truth box
+            for j, (true_box, true_label) in enumerate(zip(true_boxes, true_labels)):
+                if j in matched_gt:
+                    continue
+                iou = calculate_iou(pred_box, true_box)
+                if iou > best_iou and pred_label == true_label:
+                    best_iou = iou
+                    best_gt_idx = j
+            
+            if best_gt_idx >= 0:
+                total_tp += 1
+                matched_gt.add(best_gt_idx)
+            else:
+                total_fp += 1
+        
+        # Count unmatched ground truth boxes as false negatives
+        total_fn += len(true_boxes) - len(matched_gt)
+    
+    # Calculate precision and recall
+    precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
+    
+    return precision, recall
+
+all_predictions = []
+all_targets = []
 for image_path in os.listdir(image_dir):
     # Load image and initial prediction
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
@@ -346,6 +407,17 @@ for image_path in os.listdir(image_dir):
             correct_predictions += 1
             img_correct += 1
             used_truth_indices.append(best_truth_idx)
+        preds = [{
+        'boxes': torch.tensor(filtered_predictions['boxes']),
+        'scores': torch.tensor(filtered_predictions['scores']),
+        'labels': torch.tensor(filtered_predictions['labels']),
+        }]
+        targets = [{
+            'boxes': torch.tensor(true_boxes),
+            'labels': torch.tensor(true_labels),
+        }]
+        all_predictions.extend(preds)
+        all_targets.extend(targets)
 
     #ends counting
     # Update metrics
@@ -366,6 +438,7 @@ for image_path in os.listdir(image_dir):
     }]
     metric.update(preds, targets)
 
+precision, recall = calculate_precision_recall(all_predictions, all_targets)
 # Final metrics
 final_metrics = metric.compute()
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
@@ -374,7 +447,8 @@ print(f"Recall: {final_metrics['mar_100'].mean():.4f}")
 print(f"Type of mAP@0.5: {type(final_metrics['map_50'])}")
 print(f"Type of map_per_class: {type(final_metrics['map_per_class'])}")
 print(f"Type of mar_100: {type(final_metrics['mar_100'])}")
-
+print(f"calculated Precision: {precision:.4f}")
+print(f"calculated Recall: {recall:.4f}")
 print("\nFinal Statistics:")
 print(f"Total Correct Predictions: {correct_predictions}")
 print(f"Total Predictions Made: {total_predictions}")
