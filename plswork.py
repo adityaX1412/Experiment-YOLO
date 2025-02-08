@@ -97,7 +97,7 @@ def create_visualizations(predictions, metrics_data):
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
-MODEL_WEIGHTS = "/kaggle/input/waid-no-soap/vanillanosoap.pt"
+MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
@@ -105,7 +105,7 @@ DOUBLE_INFERENCE_THRESHOLD = 0.1
 
 model = YOLO(MODEL_WEIGHTS)
 
-predictions_path = "/kaggle/input/json-files/vannillanosoap.json"
+predictions_path = "/kaggle/input/json-files/spdld.json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
 
