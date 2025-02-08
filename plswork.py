@@ -7,6 +7,7 @@ from torchmetrics.detection import MeanAveragePrecision
 import json
 from collections import defaultdict
 import time
+import logging
 import matplotlib.pyplot as plt
 from thop import profile
 from torchvision.transforms import ToTensor
@@ -21,6 +22,21 @@ NMS_IOU_THRESHOLD = 0.45
 DOUBLE_INFERENCE_THRESHOLD = 0.1 
 
 model = YOLO(MODEL_WEIGHTS)
+
+# ✅ Setup Logger: Logs ONLY to Console
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Console handler (real-time logging)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Log format
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(formatter)
+
+# Attach handler (Console only, No File)
+logger.addHandler(console_handler)
 
 predictions_path = "/kaggle/input/waid-preds/predictions.json"
 if not os.path.exists(predictions_path):
@@ -372,9 +388,10 @@ def perform_double_inference(image_path, model, original_detection):
     
     plt.show()
 
-    
+    logger.info(f"⏱️ Inference Time: {inference_time:.2f} ms")
+    logger.info(f"⚡ GFLOPs: {gflops:.2f}" if gflops else "⚠️ GFLOPs computation failed.")
 
-    return best_match if best_conf > original_score else None,gflops,inference_time
+    return best_match if best_conf > original_score else None
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True,extended_summary=True)
@@ -422,13 +439,11 @@ for image_path in os.listdir(IMAGE_DIR):
         }
         
         # Perform double inference
-        refined,gflops,inference_time = perform_double_inference(
+        refined = perform_double_inference(
             os.path.join(IMAGE_DIR, image_path),
             model,
             original_detection
         )
-        print(f"\n⏱️ Inference Time: {inference_time:.2f} ms")
-        print(f"⚡ GFLOPs: {gflops:.2f}" if gflops else "⚠️ GFLOPs computation failed.")
         
         if refined:
             replacement_candidates.append({
@@ -515,5 +530,3 @@ print(f"calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
 if total_predictions > 0:
     print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
-print(f"\n⏱️ Inference Time: {inference_time:.2f} ms")
-print(f"⚡ GFLOPs: {gflops:.2f}" if gflops else "⚠️ GFLOPs computation failed.")
