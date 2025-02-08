@@ -159,7 +159,7 @@ def calculate_precision_recall(all_predictions, all_targets):
         
         # For each prediction, find best matching ground truth
         for i, (pred_box, pred_label) in enumerate(zip(pred_boxes, pred_labels)):
-            best_iou = IOU_THRESHOLD
+            best_iou = iou_threshold
             best_gt_idx = -1
             
             # Find best matching ground truth box
