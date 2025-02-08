@@ -9,6 +9,7 @@ import numpy as np
 import yaml
 from torch.autograd import Variable
 from torchmetrics.detection import MeanAveragePrecision
+from collections import defaultdict
 
 #counting the next 3
 total_predictions = 0
