@@ -26,20 +26,33 @@ DOUBLE_INFERENCE_THRESHOLD = 0.1
 
 model = YOLO(MODEL_WEIGHTS)
 
-# ✅ Setup Logger: Logs ONLY to Console
+# Define logging setup
+log_file = "/kaggle/working/inference_log.txt"
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Console handler (real-time logging)
+# Console handler
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 
-# Log format
+# File handler
+file_handler = logging.FileHandler(log_file, mode="w")
+file_handler.setLevel(logging.INFO)
+
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
+file_handler.setFormatter(formatter)
 
-# Attach handler (Console only, No File)
 logger.addHandler(console_handler)
+logger.addHandler(file_handler)
+
+# Directories for saving results
+WORKING_DIR = "/kaggle/working"
+VISUALIZATION_DIR = os.path.join(WORKING_DIR, "visualizations")
+INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
+FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
+os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
+os.makedirs(FINAL_VIS_DIR, exist_ok=True)
 
 predictions_path = "/kaggle/input/waid-preds/predictions.json"
 if not os.path.exists(predictions_path):
@@ -558,14 +571,24 @@ for image_path in os.listdir(IMAGE_DIR):
 final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
 map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
-# Add this at the end of your script, after all processing is done
+
+# Directories for saving results
+WORKING_DIR = "/kaggle/working"
+VISUALIZATION_DIR = os.path.join(WORKING_DIR, "visualizations")
+INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
+FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
+os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
+os.makedirs(FINAL_VIS_DIR, exist_ok=True)
+
+# After all processing is done
 if inference_times:
     avg_inference_time = sum(inference_times) / len(inference_times)
-    print(f"\nAverage Inference Time: {avg_inference_time:.2f} ms")
+    logger.info(f"Average Inference Time: {avg_inference_time:.2f} ms")
 
 if gflops_values:
     avg_gflops = sum(gflops_values) / len(gflops_values)
-    print(f"Average GFLOPs: {avg_gflops:.2f}")
+    logger.info(f"Average GFLOPs: {avg_gflops:.2f}")
+    
 print(f"\nFinal Metrics:")
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
 print(f"Calculated mAP@50 : {map50:.4f}")
