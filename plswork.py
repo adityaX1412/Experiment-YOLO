@@ -13,6 +13,8 @@ IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
+OUTPUT_DIR = "/kaggle/working/model_analysis"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
@@ -457,3 +459,13 @@ print(f"calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
 if total_predictions > 0:
     print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
+metrics_file = os.path.join(OUTPUT_DIR, "inference_metrics.txt")
+with open(metrics_file, "w") as f:
+    f.write(f"Average Inference Time: {avg_inference_time*1000:.2f} ms\n")
+    f.write(f"Average GFLOPS: {avg_gflops:.2f}\n")
+    f.write(f"Model Parameters: {params/1e6:.2f}M\n")
+    f.write(f"Inference FPS: {1.0/avg_inference_time:.2f}\n")
+    f.write(f"Number of samples: {sample_size}\n")
+    
+print(f"\nResults saved to {OUTPUT_DIR}")
+print(f"- Inference metrics: {metrics_file}")
