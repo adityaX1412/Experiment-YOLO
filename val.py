@@ -3,7 +3,7 @@ warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    model = YOLO('/kaggle/input/yolo-weights/weights/vanillasoap.pt')
+    model = YOLO('/kaggle/input/waid-no-soap/vanillanosoap.pt')
     # /kaggle/input/yolo-weights/weights/spdnsoap.pt
     model.val(data='/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml',
               split='test',
@@ -12,5 +12,5 @@ if __name__ == '__main__':
               # rect=False,
               save_json=True, # if you need to cal coco metrice
               project='runs/val',
-              name='yolov8n-vanillasoap',
+              name='yolov8n-vanillanosoap',
               )
