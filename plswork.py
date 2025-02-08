@@ -11,6 +11,9 @@ import logging
 import matplotlib.pyplot as plt
 from thop import profile
 from torchvision.transforms import ToTensor
+import sys
+sys.stdout.flush()  # Force print output
+
 
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
