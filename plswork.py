@@ -10,7 +10,7 @@ from collections import defaultdict
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
-MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdp2p2.pt"
+MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/vanillasoap.pt"
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
@@ -18,7 +18,7 @@ DOUBLE_INFERENCE_THRESHOLD = 0.1
 
 model = YOLO(MODEL_WEIGHTS)
 
-predictions_path = "/kaggle/input/json-files/spdp2p2.json"
+predictions_path = "/kaggle/input/json-files/vanilla.json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
 
