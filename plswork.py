@@ -105,7 +105,7 @@ DOUBLE_INFERENCE_THRESHOLD = 0.1
 
 model = YOLO(MODEL_WEIGHTS)
 
-predictions_path = "/kaggle/input/json-files/spdld.json"
+predictions_path = "/kaggle/input/waid-preds/predictions.json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
 
