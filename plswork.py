@@ -3,17 +3,20 @@ import torch
 import numpy as np
 from PIL import Image
 from ultralytics import YOLO
-import time
-import matplotlib.pyplot as plt
-import seaborn as sns
-from thop import profile
-import pandas as pd
-import json
 from torchmetrics.detection import MeanAveragePrecision
+import json
 from collections import defaultdict
-# Add these to your existing constants
-OUTPUT_DIR = "/kaggle/working/"
-BATCH_SIZE = 1
+from thop import profile
+import time
+
+IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
+LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
+DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
+MODEL_WEIGHTS = "/kaggle/input/waid-no-soap/vanillanosoap.pt"
+CONF_THRESHOLD = 0.25
+IOU_THRESHOLD = 0.5 
+NMS_IOU_THRESHOLD = 0.45
+DOUBLE_INFERENCE_THRESHOLD = 0.1
 NUM_WARMUP = 10
 NUM_TRIALS = 100
 
@@ -48,66 +51,9 @@ def calculate_inference_metrics(model, image_path):
     
     return avg_inference_time, gflops, params
 
-def create_visualizations(predictions, metrics_data):
-    """Create and save various visualization plots"""
-    
-    # 1. Confidence Distribution
-    plt.figure(figsize=(10, 6))
-    confidences = [pred['score'] for pred in val_predictions]
-    plt.hist(confidences, bins=50, alpha=0.75)
-    plt.title('Distribution of Detection Confidences')
-    plt.xlabel('Confidence Score')
-    plt.ylabel('Count')
-    plt.savefig(os.path.join(OUTPUT_DIR, 'confidence_distribution.png'))
-    plt.close()
-    
-    # 2. Class Distribution
-    plt.figure(figsize=(10, 6))
-    classes = [pred['category_id'] for pred in val_predictions]
-    class_counts = pd.Series(classes).value_counts()
-    sns.barplot(x=class_counts.index, y=class_counts.values)
-    plt.title('Distribution of Detected Classes')
-    plt.xlabel('Class ID')
-    plt.ylabel('Count')
-    plt.savefig(os.path.join(OUTPUT_DIR, 'class_distribution.png'))
-    plt.close()
-    
-    # 3. Precision-Recall Curve
-    plt.figure(figsize=(10, 6))
-    precisions = metrics_data['precision']
-    recalls = metrics_data['recall']
-    plt.plot(recalls, precisions)
-    plt.title('Precision-Recall Curve')
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.grid(True)
-    plt.savefig(os.path.join(OUTPUT_DIR, 'precision_recall_curve.png'))
-    plt.close()
-    
-    # 4. Per-class mAP
-    plt.figure(figsize=(12, 6))
-    class_maps = metrics_data['class_map50_95']
-    classes = list(class_maps.keys())
-    maps = list(class_maps.values())
-    sns.barplot(x=classes, y=maps)
-    plt.title('Per-class mAP@50-95')
-    plt.xlabel('Class ID')
-    plt.ylabel('mAP')
-    plt.savefig(os.path.join(OUTPUT_DIR, 'per_class_map.png'))
-    plt.close()
-
-IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
-LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
-DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
-MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
-CONF_THRESHOLD = 0.25
-IOU_THRESHOLD = 0.5 
-NMS_IOU_THRESHOLD = 0.45
-DOUBLE_INFERENCE_THRESHOLD = 0.1 
-
 model = YOLO(MODEL_WEIGHTS)
 
-predictions_path = "/kaggle/input/waid-preds/predictions.json"
+predictions_path = "/kaggle/input/json-files/vannillanosoap.json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
 
@@ -164,14 +110,11 @@ def non_max_suppression(boxes, scores, labels, iou_threshold):
     return boxes[keep].tolist(), [scores[i] for i in keep], [labels[i] for i in keep]
 
 def calculate_precision_recall(all_predictions, all_targets):
-    """
-    Calculate precision and recall across all images
-    """
+    """Calculate precision and recall across all images"""
     total_tp = 0  # True positives
     total_fp = 0  # False positives
     total_fn = 0  # False negatives
     
-    # Group predictions and targets by image
     for preds, targets in zip(all_predictions, all_targets):
         pred_boxes = preds['boxes']
         pred_scores = preds['scores']
@@ -179,26 +122,21 @@ def calculate_precision_recall(all_predictions, all_targets):
         true_boxes = targets['boxes']
         true_labels = targets['labels']
         
-        # Skip if no predictions or no ground truth
         if len(pred_boxes) == 0 or len(true_boxes) == 0:
-            total_fn += len(true_boxes)  # All ground truths are false negatives
+            total_fn += len(true_boxes)
             continue
             
-        # Convert tensors to numpy for easier handling
         pred_boxes = pred_boxes.numpy()
         pred_labels = pred_labels.numpy()
         true_boxes = true_boxes.numpy()
         true_labels = true_labels.numpy()
         
-        # Track matched ground truth boxes
         matched_gt = set()
         
-        # For each prediction, find best matching ground truth
         for i, (pred_box, pred_label) in enumerate(zip(pred_boxes, pred_labels)):
             best_iou = IOU_THRESHOLD
             best_gt_idx = -1
             
-            # Find best matching ground truth box
             for j, (true_box, true_label) in enumerate(zip(true_boxes, true_labels)):
                 if j in matched_gt:
                     continue
@@ -213,10 +151,8 @@ def calculate_precision_recall(all_predictions, all_targets):
             else:
                 total_fp += 1
         
-        # Count unmatched ground truth boxes as false negatives
         total_fn += len(true_boxes) - len(matched_gt)
     
-    # Calculate precision and recall
     precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
     recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
     
@@ -236,7 +172,6 @@ def calculate_map(predictions, targets, iou_threshold):
         unique_classes = np.unique(np.concatenate([pred_labels, true_labels]))
         
         for class_id in unique_classes:
-            # Get class-specific predictions and targets
             class_pred_mask = pred_labels == class_id
             class_true_mask = true_labels == class_id
             
@@ -247,12 +182,10 @@ def calculate_map(predictions, targets, iou_threshold):
             if len(class_true_boxes) == 0:
                 continue
                 
-            # Sort predictions by confidence
             score_sort = np.argsort(-class_pred_scores)
             class_pred_boxes = class_pred_boxes[score_sort]
             class_pred_scores = class_pred_scores[score_sort]
             
-            # Calculate precision and recall points
             tp = np.zeros(len(class_pred_boxes))
             fp = np.zeros(len(class_pred_boxes))
             matched_gt = set()
@@ -275,13 +208,11 @@ def calculate_map(predictions, targets, iou_threshold):
                 else:
                     fp[pred_idx] = 1
             
-            # Compute precision and recall
             cum_tp = np.cumsum(tp)
             cum_fp = np.cumsum(fp)
             recalls = cum_tp / len(class_true_boxes)
             precisions = cum_tp / (cum_tp + cum_fp)
             
-            # Compute AP using 11-point interpolation
             ap = 0
             for t in np.arange(0, 1.1, 0.1):
                 if np.sum(recalls >= t) == 0:
@@ -292,7 +223,6 @@ def calculate_map(predictions, targets, iou_threshold):
             
             class_aps[int(class_id)].append(ap)
     
-    # Calculate mean AP for each class
     mean_aps = {class_id: np.mean(aps) for class_id, aps in class_aps.items()}
     map_value = np.mean(list(mean_aps.values()))
     
@@ -300,7 +230,7 @@ def calculate_map(predictions, targets, iou_threshold):
 
 def calculate_map50_95(predictions, targets):
     """Calculate mAP@50-95"""
-    iou_thresholds = np.linspace(0.5, 0.95, 10)  # [0.5, 0.55, ..., 0.95]
+    iou_thresholds = np.linspace(0.5, 0.95, 10)
     maps = []
     class_maps = defaultdict(list)
     
@@ -309,34 +239,27 @@ def calculate_map50_95(predictions, targets):
         map_value, class_aps = calculate_map(predictions, targets, iou_threshold)
         maps.append(map_value)
         
-        # Store per-class APs
         for class_id, ap in class_aps.items():
             class_maps[class_id].append(ap)
             
         print(f"mAP@{iou_threshold:.2f}: {map_value:.4f}")
     
-    # Calculate mAP@50-95
     map50_95 = np.mean(maps)
-    
-    # Calculate per-class mAP@50-95
     class_map50_95 = {class_id: np.mean(aps) for class_id, aps in class_maps.items()}
     
     return map50_95, maps[0], class_map50_95
 
 def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop_coords):
-    """Always returns a numpy array with proper dimensions"""
+    """Scale boxes to original image coordinates"""
     try:
-        # Handle null/empty inputs
         if padded_boxes is None or not isinstance(padded_boxes, np.ndarray):
             return np.empty((0, 4))
         
-        # Ensure 2D array format
         if padded_boxes.size == 0:
             return np.empty((0, 4))
         if padded_boxes.ndim == 1:
             padded_boxes = np.expand_dims(padded_boxes, 0)
             
-        # Perform coordinate transformations
         boxes = padded_boxes.copy()
         boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]] - pad_x, 0, crop_coords['resized_w'])
         boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]] - pad_y, 0, crop_coords['resized_h'])
@@ -350,23 +273,20 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
         return np.empty((0, 4))
 
 def perform_double_inference(image_path, model, original_detection):
-    """Perform double inference with same transformations as your existing code"""
+    """Perform double inference with ROI refinement"""
     img = Image.open(image_path).convert("RGB")
     img_width, img_height = img.size
     
-    # Extract detection details from JSON prediction
     x1, y1, x2, y2 = original_detection['bbox']
     sw = x2 - x1
     sh = y2 - y1
     original_score = original_detection['score']
     original_label = original_detection['category_id']
     
-    # Adaptive crop calculations (same as your code)
     cx, cy = (x1 + x2)/2, (y1 + y2)/2
     desired_width = (sw * 640) / (x2 - x1) if (x2 - x1) != 0 else 640
     desired_height = (sh * 640) / (y2 - y1) if (y2 - y1) != 0 else 640
     
-    # Expand ROI with boundary checks
     new_x1 = max(0, int(cx - desired_width/2))
     new_y1 = max(0, int(cy - desired_height/2))
     new_x2 = min(img_width, int(cx + desired_width/2))
@@ -375,26 +295,22 @@ def perform_double_inference(image_path, model, original_detection):
     if (new_x2 <= new_x1) or (new_y2 <= new_y1):
         return None
 
-    # Aspect ratio-preserving resize and padding
     crop = img.crop((new_x1, new_y1, new_x2, new_y2))
     original_w, original_h = crop.size
     ratio = min(640/original_w, 640/original_h)
     new_size = (int(original_w*ratio), int(original_h*ratio))
     resized = crop.resize(new_size, Image.BILINEAR)
     
-    # Pad to 640x640
     padded_img = Image.new("RGB", (640, 640), (114, 114, 114))
     pad_x, pad_y = (640 - new_size[0])//2, (640 - new_size[1])//2
     padded_img.paste(resized, (pad_x, pad_y))
 
-    # Second pass inference
     with torch.no_grad():
         new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD,verbose=False,augment=True)
     
     if len(new_results[0].boxes) == 0:
         return None
 
-    # Process and scale detections
     boxes = new_results[0].boxes.xyxy.cpu().numpy()
     if boxes.ndim == 1:
         boxes = np.expand_dims(boxes, axis=0)
@@ -402,35 +318,7 @@ def perform_double_inference(image_path, model, original_detection):
     confs = new_results[0].boxes.conf.cpu().numpy()
     labels = new_results[0].boxes.cls.cpu().numpy().astype(int)
     
-    # Scale boxes using your existing function
     scale_x = (new_x2 - new_x1) / new_size[0]
-    scale_y = (new_y2 - new_y1) / new_size[1]
-    
-    scaled_boxes = scale_boxes(
-        boxes.copy(), pad_x, pad_y, scale_x, scale_y,
-        {'x1': new_x1, 'y1': new_y1, 
-         'resized_w': new_size[0], 'resized_h': new_size[1]}
-    )
-    
-    best_match = None
-    best_conf = -1
-    best_iou = -1
-    
-    for box, label, conf in zip(scaled_boxes, labels, confs):
-        if label != original_label:
-            continue
-            
-        current_iou = calculate_iou([x1, y1, x2, y2], box)
-        if conf > best_conf and current_iou >= 0.25:
-            best_conf = conf
-            best_iou = current_iou
-            best_match = {
-                'bbox': box.tolist(),
-                'score': conf,
-                'category_id': label
-            }
-    
-    return best_match if best_conf > original_score else None
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True,extended_summary=True)
@@ -569,65 +457,3 @@ print(f"calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
 if total_predictions > 0:
     print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
-
-# Add this to your main execution code after loading the model
-print("\nCalculating inference metrics...")
-total_inference_time = 0
-total_gflops = 0
-inference_times = []
-image_count = 0
-
-# Sample a subset of images for inference timing
-sample_size = min(10, len(os.listdir(IMAGE_DIR)))
-sampled_images = np.random.choice(os.listdir(IMAGE_DIR), sample_size, replace=False)
-
-for image_path in sampled_images:
-    full_path = os.path.join(IMAGE_DIR, image_path)
-    inf_time, gflops, params = calculate_inference_metrics(model, full_path)
-    total_inference_time += inf_time
-    total_gflops += gflops
-    inference_times.append(inf_time)
-    image_count += 1
-    
-    if image_count % 10 == 0:
-        print(f"Processed {image_count}/{sample_size} images")
-
-avg_inference_time = total_inference_time / image_count
-avg_gflops = total_gflops / image_count
-
-print(f"\nInference Metrics:")
-print(f"Average Inference Time: {avg_inference_time*1000:.2f} ms")
-print(f"Average GFLOPS: {avg_gflops:.2f}")
-print(f"Model Parameters: {params/1e6:.2f}M")
-
-# Calculate inference FPS
-fps = 1.0 / avg_inference_time
-print(f"Inference FPS: {fps:.2f}")
-
-# Create standard deviation and percentile metrics for inference time
-inf_std = np.std(inference_times)
-inf_p95 = np.percentile(inference_times, 95)
-print(f"Inference Time Std Dev: {inf_std*1000:.2f} ms")
-print(f"95th Percentile Inference Time: {inf_p95*1000:.2f} ms")
-
-# Collect metrics for visualization
-metrics_data = {
-    'precision': precision,
-    'recall': recall,
-    'class_map50_95': class_map50_95
-}
-
-# Create and save visualizations
-print("\nGenerating visualizations...")
-create_visualizations(val_predictions, metrics_data)
-print("Visualizations saved to output directory")
-
-# Save metrics to CSV
-metrics_df = pd.DataFrame({
-    'Metric': ['mAP@50', 'mAP@50-95', 'Precision', 'Recall', 'Avg Inference Time (ms)', 
-               'Avg GFLOPS', 'FPS', 'Parameters (M)'],
-    'Value': [map50, map50_95, precision, recall, avg_inference_time*1000, 
-              avg_gflops, fps, params/1e6]
-})
-metrics_df.to_csv(os.path.join(OUTPUT_DIR, 'model_metrics.csv'), index=False)
-print("Metrics saved to model_metrics.csv")
