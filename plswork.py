@@ -269,14 +269,14 @@ def perform_double_inference(image_path, model, original_detection):
     img = Image.open(image_path).convert("RGB")
     img_width, img_height = img.size
     
-    # Extract detection details from JSON prediction
+    # Extract detection details
     x1, y1, x2, y2 = original_detection['bbox']
     sw = x2 - x1
     sh = y2 - y1
     original_score = original_detection['score']
     original_label = original_detection['category_id']
     
-    # Adaptive crop calculations
+    # Adaptive cropping
     cx, cy = (x1 + x2)/2, (y1 + y2)/2
     desired_width = (sw * 640) / (x2 - x1) if (x2 - x1) != 0 else 640
     desired_height = (sh * 640) / (y2 - y1) if (y2 - y1) != 0 else 640
@@ -289,7 +289,7 @@ def perform_double_inference(image_path, model, original_detection):
     if (new_x2 <= new_x1) or (new_y2 <= new_y1):
         return None
 
-    # Aspect ratio-preserving resize and padding
+    # Crop and resize
     crop = img.crop((new_x1, new_y1, new_x2, new_y2))
     original_w, original_h = crop.size
     ratio = min(640/original_w, 640/original_h)
@@ -302,11 +302,15 @@ def perform_double_inference(image_path, model, original_detection):
     padded_img.paste(resized, (pad_x, pad_y))
 
     # Convert to tensor for GFLOPs calculation
-    input_tensor = ToTensor()(padded_img).unsqueeze(0)
+    input_tensor = ToTensor()(padded_img).unsqueeze(0).to("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Compute GFLOPs
-    flops, params = profile(model, inputs=(input_tensor,))
-    gflops = flops / 1e9  # Convert to GFLOPs
+    # Compute GFLOPs and Params
+    try:
+        flops, params = profile(model, inputs=(input_tensor,))
+        gflops = flops / 1e9  # Convert FLOPs to GFLOPs
+    except Exception as e:
+        print(f"⚠️ GFLOPs computation error: {str(e)}")
+        gflops = None
 
     # Measure inference time
     start_time = time.time()
@@ -369,7 +373,7 @@ def perform_double_inference(image_path, model, original_detection):
     plt.show()
 
     print(f"\n⏱️ Inference Time: {inference_time:.2f} ms")
-    print(f"⚡ GFLOPs: {gflops:.2f}")
+    print(f"⚡ GFLOPs: {gflops:.2f}" if gflops else "⚠️ GFLOPs computation failed.")
 
     return best_match if best_conf > original_score else None
 
