@@ -594,7 +594,7 @@ avg_inference_time = get_average_inference_time()
 avg_gflops = get_average_gflops()
 
 print(f"✅ Average Inference Time: {avg_inference_time:.2f} ms")
-print(f"✅ Average GFLOPs: {avg_gflops:.2f}")
+print(f"✅ NO. of instances: {len(inference_times):.2f}")
 print(f"calculated Precision: {precision:.4f}")
 print(f"calculated Recall: {recall:.4f}")
 print(f"mAP@0.5: {map50:.4f}")
