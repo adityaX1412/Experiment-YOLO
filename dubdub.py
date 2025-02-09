@@ -482,37 +482,15 @@ for image_path in os.listdir(image_dir):
     'scores': scores_tensor[keep_indices].tolist(),
     'labels': labels_tensor[keep_indices].tolist()
     }
-    for box, score, label in zip(predictions['boxes'], predictions['scores'], predictions['labels']):
-        x1, y1, x2, y2 = box
-        # Draw rectangle
-        draw_initial.rectangle([x1, y1, x2, y2], outline="red", width=2)
-        # Add label and confidence
-        label_text = f"{model.names[label]}: {score:.2f}"
-        draw_initial.text((x1, y1-10), label_text, fill="red")
+  
     
-    final_img = img.copy()  # Create another copy of the original image
-    draw_final = ImageDraw.Draw(final_img)
 
-    # Visualization of final predictions
-    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
-        x1, y1, x2, y2 = box
-        # Draw rectangle
-        draw_final.rectangle([x1, y1, x2, y2], outline="blue", width=2)
-        # Add label and confidence
-        label_text = f"{model.names[label]}: {score:.2f}"
-        draw_final.text((x1, y1-10), label_text, fill="blue")
-
-    base_name = os.path.splitext(image_path)[0]
-    base_name = os.path.basename(base_name)  # Extract just the filename without path
+  # Extract just the filename without path
 
     # Display images in the notebook
     #display(initial_img)  # Display initial image with red boxes
     #display(final_img)    # Display final image
 
-    # Save images to Kaggle working directory
-    initial_path = f'/kaggle/working/visualizations/initial/{base_name}_initial.jpg'
-    final_path = f'/kaggle/working/visualizations/final/{base_name}_final.jpg'
-    gt_path = f'/kaggle/working/visualizations/gt/{base_name}_gt.jpg'
     
 
     #code for counting
@@ -522,28 +500,6 @@ for image_path in os.listdir(image_dir):
     true_boxes = np.array(true_boxes)
     true_labels = np.array(true_labels)
     
-    final_img = img.copy()  # Create another copy of the original image
-    draw_final = ImageDraw.Draw(final_img)
-
-    # Visualization of final predictions
-    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
-        x1, y1, x2, y2 = box
-        # Draw rectangle
-        draw_final.rectangle([x1, y1, x2, y2], outline="green", width=2)
-        # Add label and confidence
-        label_text = f"{model.names[label]}: {score:.2f}"
-        draw_final.text((x1, y1-10), label_text, fill="green")
-        
-    gt_img = img.copy()
-    draw_gt = ImageDraw.Draw(gt_img)
-    for box, label in zip(true_boxes, true_labels):
-        x1, y1, x2, y2 = box
-        draw_gt.rectangle([x1, y1, x2, y2], outline="blue", width=2)
-        label_text = f"GT: {model.names[label]}"
-        draw_gt.text((x1, y1 - 10), label_text, fill="blue")
-    initial_img.save(initial_path)
-    final_img.save(final_path)
-    gt_img.save(gt_path)
     #draw_initial.image.save(initial_path)
     #draw_final.image.save(final_path)
     #draw_gt.image.save(gt_path)
