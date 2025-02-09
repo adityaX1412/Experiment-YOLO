@@ -315,7 +315,7 @@ for image_path in os.listdir(image_dir):
     input_tensor = input_tensor.to("cuda" if torch.cuda.is_available() else "cpu")
     img_width, img_height = img.size
     start_time = time.time()
-    initial_results = model.predict(img, conf=0.25, verbose=True)
+    initial_results = model.predict(img, conf=0.25, verbose=False)
     inference_time = (time.time() - start_time) * 1000  # Convert to ms
     inference_times.append(inference_time)
     try:
