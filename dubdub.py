@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from PIL import Image
+from PIL import ImageDraw, ImageFont
 import torch.utils
 from ultralytics import YOLO
 import wandb
@@ -15,6 +16,8 @@ from collections import defaultdict
 total_predictions = 0
 correct_predictions = 0
 iou_threshold = 0.1
+os.makedirs('/kaggle/working/visualizations/initial', exist_ok=True)
+os.makedirs('/kaggle/working/visualizations/final', exist_ok=True)
 
 def simple_nms(boxes, scores, iou_threshold=0):
     # Convert to tensor if needed
@@ -295,6 +298,8 @@ for image_path in os.listdir(image_dir):
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
     img_width, img_height = img.size
     initial_results = model.predict(img, conf=0.25, verbose=False)
+    initial_img = img.copy()  
+    draw_initial = ImageDraw.Draw(initial_img)
     result = initial_results[0]
     
     # Load ground truth
@@ -479,6 +484,40 @@ for image_path in os.listdir(image_dir):
     'scores': scores_tensor[keep_indices].tolist(),
     'labels': labels_tensor[keep_indices].tolist()
     }
+    for box, score, label in zip(predictions['boxes'], predictions['scores'], predictions['labels']):
+        x1, y1, x2, y2 = box
+        # Draw rectangle
+        draw_initial.rectangle([x1, y1, x2, y2], outline="red", width=2)
+        # Add label and confidence
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_initial.text((x1, y1-10), label_text, fill="red")
+    
+    final_img = img.copy()  # Create another copy of the original image
+    draw_final = ImageDraw.Draw(final_img)
+
+    # Visualization of final predictions
+    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
+        x1, y1, x2, y2 = box
+        # Draw rectangle
+        draw_final.rectangle([x1, y1, x2, y2], outline="blue", width=2)
+        # Add label and confidence
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_final.text((x1, y1-10), label_text, fill="blue")
+
+    base_name = os.path.splitext(image_path)[0]
+    base_name = os.path.basename(base_name)  # Extract just the filename without path
+
+    # Display images in the notebook
+    display(initial_img)  # Display initial image with red boxes
+    display(final_img)    # Display final image
+
+    # Save images to Kaggle working directory
+    initial_save_path = f'/kaggle/working/visualizations/initial/{base_name}_initial.jpg'
+    final_save_path = f'/kaggle/working/visualizations/final/{base_name}_final.jpg'
+
+    # Save the images
+    initial_img.save(initial_save_path)
+    final_img.save(final_save_path)
 
     #code for counting
     pred_boxes = np.array(filtered_predictions['boxes'])
@@ -486,7 +525,18 @@ for image_path in os.listdir(image_dir):
     pred_labels = np.array(filtered_predictions['labels'])
     true_boxes = np.array(true_boxes)
     true_labels = np.array(true_labels)
+    
+    final_img = img.copy()  # Create another copy of the original image
+    draw_final = ImageDraw.Draw(final_img)
 
+    # Visualization of final predictions
+    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
+        x1, y1, x2, y2 = box
+        # Draw rectangle
+        draw_final.rectangle([x1, y1, x2, y2], outline="green", width=2)
+        # Add label and confidence
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_final.text((x1, y1-10), label_text, fill="green")
     #code for counting
     for i, (pred_box, pred_label) in enumerate(zip(pred_boxes, pred_labels)):
         total_predictions += 1
@@ -520,6 +570,7 @@ for image_path in os.listdir(image_dir):
         }]
         all_predictions.extend(preds)
         all_targets.extend(targets)
+        
 
     #ends counting
     # Update metrics
@@ -554,7 +605,3 @@ print(f"calculated Precision: {precision:.4f}")
 print(f"calculated Recall: {recall:.4f}")
 print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
 print(f"Calculated mAP@50-95: {map50_95:.4f}")
-print("\nFinal Statistics:")
-print(f"Total Correct Predictions: {correct_predictions}")
-print(f"Total Predictions Made: {total_predictions}")
-print(f"Precision: {correct_predictions/(total_predictions + 1e-7):.4f}")
