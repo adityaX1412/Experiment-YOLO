@@ -593,15 +593,8 @@ for image_path in os.listdir(image_dir):
 
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
 map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
-# Final metrics
-final_metrics = metric.compute()
-print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
-print(f"Precision: {final_metrics['map_per_class'].mean():.4f}")
-print(f"Recall: {final_metrics['mar_100'].mean():.4f}")
-print(f"Type of mAP@0.5: {type(final_metrics['map_50'])}")
-print(f"Type of map_per_class: {type(final_metrics['map_per_class'])}")
-print(f"Type of mar_100: {type(final_metrics['mar_100'])}")
+
 print(f"calculated Precision: {precision:.4f}")
 print(f"calculated Recall: {recall:.4f}")
-print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
+print(f"mAP@0.5: {map50:.4f}")
 print(f"Calculated mAP@50-95: {map50_95:.4f}")
