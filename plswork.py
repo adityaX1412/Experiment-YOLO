@@ -11,9 +11,6 @@ import logging
 import matplotlib.pyplot as plt
 from thop import profile
 from torchvision.transforms import ToTensor
-import sys
-sys.stdout.flush()  # Force print output
-
 
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
@@ -26,33 +23,36 @@ DOUBLE_INFERENCE_THRESHOLD = 0.1
 
 model = YOLO(MODEL_WEIGHTS)
 
-# Define logging setup
-log_file = "/kaggle/working/inference_log.txt"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]  # Explicitly direct to standard stream
+)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.info("✅ Logging setup complete - this should appear in console")
 
-# Console handler
+# Console handler (real-time logging)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 
-# File handler
-file_handler = logging.FileHandler(log_file, mode="w")
-file_handler.setLevel(logging.INFO)
-
+# Log format
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
-file_handler.setFormatter(formatter)
 
+# Attach handler (Console only, No File)
 logger.addHandler(console_handler)
-logger.addHandler(file_handler)
 
-# Directories for saving results
-WORKING_DIR = "/kaggle/working"
-VISUALIZATION_DIR = os.path.join(WORKING_DIR, "visualizations")
+VISUALIZATION_DIR = "visualizations"
 INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
 FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
+
+# Create visualization directories if they don't exist
 os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
 os.makedirs(FINAL_VIS_DIR, exist_ok=True)
+
+# Add tracking variables for inference statistics
+inference_times = []
+gflops_values = []
 
 predictions_path = "/kaggle/input/waid-preds/predictions.json"
 if not os.path.exists(predictions_path):
@@ -296,18 +296,6 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
         print(f"Scaling error: {str(e)}")
         return np.empty((0, 4))
 
-VISUALIZATION_DIR = "visualizations"
-INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
-FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
-
-# Create visualization directories if they don't exist
-os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
-os.makedirs(FINAL_VIS_DIR, exist_ok=True)
-
-# Add tracking variables for inference statistics
-inference_times = []
-gflops_values = []
-
 def perform_double_inference(image_path, model, original_detection):
     """Perform double inference with inference time, GFLOPs, and visualizations."""
     img = Image.open(image_path).convert("RGB")
@@ -360,7 +348,7 @@ def perform_double_inference(image_path, model, original_detection):
     # Measure inference time
     start_time = time.time()
     with torch.no_grad():
-        new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD, verbose=False, augment=True)
+        new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD, verbose=True, augment=True)
     inference_time = (time.time() - start_time) * 1000  # Convert to ms
     inference_times.append(inference_time)
     
@@ -444,8 +432,6 @@ def perform_double_inference(image_path, model, original_detection):
     logger.info(f"⚡ GFLOPs: {gflops:.2f}" if gflops else "⚠️ GFLOPs computation failed.")
 
     return best_match if best_conf > original_score else None
-
-
 
 # Initialize metrics
 metric = MeanAveragePrecision(class_metrics=True,extended_summary=True)
@@ -568,36 +554,20 @@ for image_path in os.listdir(IMAGE_DIR):
     metric.update(preds, targets)
 
 # Compute final metrics
-final_metrics = metric.compute()
+#final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
 map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
 
-# Directories for saving results
-WORKING_DIR = "/kaggle/working"
-VISUALIZATION_DIR = os.path.join(WORKING_DIR, "visualizations")
-INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
-FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
-os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
-os.makedirs(FINAL_VIS_DIR, exist_ok=True)
 
-# After all processing is done
-if inference_times:
-    avg_inference_time = sum(inference_times) / len(inference_times)
-    logger.info(f"Average Inference Time: {avg_inference_time:.2f} ms")
-
-if gflops_values:
-    avg_gflops = sum(gflops_values) / len(gflops_values)
-    logger.info(f"Average GFLOPs: {avg_gflops:.2f}")
-    
-print(f"\nFinal Metrics:")
-print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
-print(f"Calculated mAP@50 : {map50:.4f}")
-print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
-print(f"Calculated mAP@50-95: {map50_95:.4f}")
-print(f"Recall: {final_metrics['mar_100']:.4f}")
-print(f"Precision: {final_metrics['precision'].mean():.4f}")
-print(f"calculated Precision: {precision:.4f}")
-print(f"calculated Recall: {recall:.4f}")
-print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
-if total_predictions > 0:
-    print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
+#print(f"\nFinal Metrics:")
+#print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
+#print(f"Calculated mAP@50 : {map50:.4f}")
+#print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
+#print(f"Calculated mAP@50-95: {map50_95:.4f}")
+#print(f"Recall: {final_metrics['mar_100']:.4f}")
+#print(f"Precision: {final_metrics['precision'].mean():.4f}")
+#print(f"calculated Precision: {precision:.4f}")
+#print(f"calculated Recall: {recall:.4f}")
+#print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
+#if total_predictions > 0:
+    #print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
