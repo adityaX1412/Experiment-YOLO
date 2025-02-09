@@ -555,8 +555,8 @@ for image_path in os.listdir(IMAGE_DIR):
 
 # Compute final metrics
 #final_metrics = metric.compute()
-precision, recall = calculate_precision_recall(all_predictions, all_targets)
-map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
+#precision, recall = calculate_precision_recall(all_predictions, all_targets)
+#map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
 
 
 #print(f"\nFinal Metrics:")
