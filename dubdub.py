@@ -18,6 +18,7 @@ correct_predictions = 0
 iou_threshold = 0.1
 os.makedirs('/kaggle/working/visualizations/initial', exist_ok=True)
 os.makedirs('/kaggle/working/visualizations/final', exist_ok=True)
+os.makedirs('/kaggle/working/visualizations/gt', exist_ok=True)
 
 def simple_nms(boxes, scores, iou_threshold=0):
     # Convert to tensor if needed
@@ -116,7 +117,7 @@ print("Checkpoint keys:", checkpoint.keys())
 
 # Extract the state dictionary correctly
 if isinstance(checkpoint, torch.nn.Module):
-    print("⚠️ Loaded full model instead of state_dict! Extracting weights...")
+    print("⚠ Loaded full model instead of state_dict! Extracting weights...")
     state_dict = checkpoint.state_dict()  # Extract weights from full model
 elif isinstance(checkpoint, dict) and "model" in checkpoint:
     print("✅ Extracting state_dict from checkpoint dictionary...")
@@ -508,16 +509,14 @@ for image_path in os.listdir(image_dir):
     base_name = os.path.basename(base_name)  # Extract just the filename without path
 
     # Display images in the notebook
-    display(initial_img)  # Display initial image with red boxes
-    display(final_img)    # Display final image
+    #display(initial_img)  # Display initial image with red boxes
+    #display(final_img)    # Display final image
 
     # Save images to Kaggle working directory
-    initial_save_path = f'/kaggle/working/visualizations/initial/{base_name}_initial.jpg'
-    final_save_path = f'/kaggle/working/visualizations/final/{base_name}_final.jpg'
-
-    # Save the images
-    initial_img.save(initial_save_path)
-    final_img.save(final_save_path)
+    initial_path = f'/kaggle/working/visualizations/initial/{base_name}_initial.jpg'
+    final_path = f'/kaggle/working/visualizations/final/{base_name}_final.jpg'
+    gt_path = f'/kaggle/working/visualizations/gt/{base_name}_gt.jpg'
+    
 
     #code for counting
     pred_boxes = np.array(filtered_predictions['boxes'])
@@ -537,6 +536,20 @@ for image_path in os.listdir(image_dir):
         # Add label and confidence
         label_text = f"{model.names[label]}: {score:.2f}"
         draw_final.text((x1, y1-10), label_text, fill="green")
+        
+    gt_img = img.copy()
+    draw_gt = ImageDraw.Draw(gt_img)
+    for box, label in zip(true_boxes, true_labels):
+        x1, y1, x2, y2 = box
+        draw_gt.rectangle([x1, y1, x2, y2], outline="blue", width=2)
+        label_text = f"GT: {model.names[label]}"
+        draw_gt.text((x1, y1 - 10), label_text, fill="blue")
+    initial_img.save(initial_path)
+    final_img.save(final_path)
+    gt_img.save(gt_path)
+    #draw_initial.image.save(initial_path)
+    #draw_final.image.save(final_path)
+    #draw_gt.image.save(gt_path)
     #code for counting
     for i, (pred_box, pred_label) in enumerate(zip(pred_boxes, pred_labels)):
         total_predictions += 1
