@@ -554,20 +554,20 @@ for image_path in os.listdir(IMAGE_DIR):
     metric.update(preds, targets)
 
 # Compute final metrics
-#final_metrics = metric.compute()
-#precision, recall = calculate_precision_recall(all_predictions, all_targets)
-#map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
+final_metrics = metric.compute()
+precision, recall = calculate_precision_recall(all_predictions, all_targets)
+map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
 
 
-#print(f"\nFinal Metrics:")
-#print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
-#print(f"Calculated mAP@50 : {map50:.4f}")
-#print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
-#print(f"Calculated mAP@50-95: {map50_95:.4f}")
-#print(f"Recall: {final_metrics['mar_100']:.4f}")
-#print(f"Precision: {final_metrics['precision'].mean():.4f}")
-#print(f"calculated Precision: {precision:.4f}")
-#print(f"calculated Recall: {recall:.4f}")
-#print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
+print(f"\nFinal Metrics:")
+print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
+print(f"Calculated mAP@50 : {map50:.4f}")
+print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
+print(f"Calculated mAP@50-95: {map50_95:.4f}")
+print(f"Recall: {final_metrics['mar_100']:.4f}")
+print(f"Precision: {final_metrics['precision'].mean():.4f}")
+print(f"calculated Precision: {precision:.4f}")
+print(f"calculated Recall: {recall:.4f}")
+print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
 #if total_predictions > 0:
     #print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
