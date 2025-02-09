@@ -11,11 +11,28 @@ import yaml
 from torch.autograd import Variable
 from torchmetrics.detection import MeanAveragePrecision
 from collections import defaultdict
+import time
+from thop import profile
+
+
+
 
 #counting the next 3
 total_predictions = 0
 correct_predictions = 0
 iou_threshold = 0.1
+
+# Track inference times and GFLOPs
+inference_times = []
+gflops_values = []
+
+def get_average_inference_time():
+    """Compute and return the average inference time in milliseconds."""
+    return np.mean(inference_times) if inference_times else 0
+
+def get_average_gflops():
+    """Compute and return the average GFLOPs."""
+    return np.mean(gflops_values) if gflops_values else 0
 
 def simple_nms(boxes, scores, iou_threshold=0):
     # Convert to tensor if needed
@@ -294,11 +311,23 @@ all_targets = []
 for image_path in os.listdir(image_dir):
     # Load image and initial prediction
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
+    input_tensor = torch.tensor(np.array(img)).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    input_tensor = input_tensor.to("cuda" if torch.cuda.is_available() else "cpu")
     img_width, img_height = img.size
+    start_time = time.time()
     initial_results = model.predict(img, conf=0.25, verbose=True)
+    inference_time = (time.time() - start_time) * 1000  # Convert to ms
+    inference_times.append(inference_time)
+    try:
+        flops, params = profile(model, inputs=(input_tensor,))
+        gflops = flops / 1e9  # Convert to GFLOPs
+        gflops_values.append(gflops)
+    except Exception as e:
+        print(f"⚠️ GFLOPs computation error: {str(e)}")
     initial_img = img.copy()  
     draw_initial = ImageDraw.Draw(initial_img)
     result = initial_results[0]
+    
     
     # Load ground truth
     true_boxes, true_labels = [], []
@@ -560,6 +589,12 @@ for image_path in os.listdir(image_dir):
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
 map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
 
+# Compute final averages
+avg_inference_time = get_average_inference_time()
+avg_gflops = get_average_gflops()
+
+print(f"✅ Average Inference Time: {avg_inference_time:.2f} ms")
+print(f"✅ Average GFLOPs: {avg_gflops:.2f}")
 print(f"calculated Precision: {precision:.4f}")
 print(f"calculated Recall: {recall:.4f}")
 print(f"mAP@0.5: {map50:.4f}")
