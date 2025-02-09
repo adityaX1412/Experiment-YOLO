@@ -11,6 +11,7 @@ import logging
 import matplotlib.pyplot as plt
 from thop import profile
 from torchvision.transforms import ToTensor
+from PIL import ImageDraw
 
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
@@ -42,11 +43,12 @@ console_handler.setFormatter(formatter)
 # Attach handler (Console only, No File)
 logger.addHandler(console_handler)
 
-VISUALIZATION_DIR = "visualizations"
+# Define the save paths in Kaggle working directory
+VISUALIZATION_DIR = "/kaggle/working/visualizations"
 INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
 FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
 
-# Create visualization directories if they don't exist
+# Create directories if they don't exist
 os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
 os.makedirs(FINAL_VIS_DIR, exist_ok=True)
 
@@ -109,6 +111,38 @@ def non_max_suppression(boxes, scores, labels, iou_threshold):
         indices = indices[1:][ious < iou_threshold]
 
     return boxes[keep].tolist(), [scores[i] for i in keep], [labels[i] for i in keep]
+
+def save_visualizations(image_path, img, predictions, filtered_predictions, model):
+    """Save visualizations of initial and final detections."""
+    base_name = os.path.splitext(os.path.basename(image_path))[0]
+
+    # Copy original image
+    initial_img = img.copy()
+    draw_initial = ImageDraw.Draw(initial_img)
+
+    # Draw initial predictions (red boxes)
+    for box, score, label in zip(predictions['boxes'], predictions['scores'], predictions['labels']):
+        x1, y1, x2, y2 = box
+        draw_initial.rectangle([x1, y1, x2, y2], outline="red", width=2)
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_initial.text((x1, y1 - 10), label_text, fill="red")
+
+    # Copy again for final visualization
+    final_img = img.copy()
+    draw_final = ImageDraw.Draw(final_img)
+
+    # Draw final predictions (green boxes)
+    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
+        x1, y1, x2, y2 = box
+        draw_final.rectangle([x1, y1, x2, y2], outline="green", width=2)
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_final.text((x1, y1 - 10), label_text, fill="green")
+
+    # Save images in Kaggle working directory
+    initial_img.save(os.path.join(INITIAL_VIS_DIR, f"{base_name}_initial.jpg"))
+    final_img.save(os.path.join(FINAL_VIS_DIR, f"{base_name}_final.jpg"))
+
+    print(f"✅ Saved visualizations for {image_path} in Kaggle working directory.")
 
 def calculate_precision_recall(all_predictions, all_targets):
     """
@@ -443,7 +477,6 @@ all_targets = []
 # Process each image
 for image_path in os.listdir(IMAGE_DIR):
     img = Image.open(os.path.join(IMAGE_DIR, image_path)).convert("RGB")
-    
     # Load ground truth labels
     true_boxes, true_labels = [], []
     label_path = os.path.join(LABEL_DIR, os.path.splitext(image_path)[0] + '.txt')
@@ -484,6 +517,11 @@ for image_path in os.listdir(IMAGE_DIR):
             model,
             original_detection
         )
+
+        if refined:
+            logger.info(f"Refined prediction found (new score={refined['score']:.2f})")
+        else:
+            logger.info("No refinement found")
         
         if refined:
             replacement_candidates.append({
