@@ -16,9 +16,6 @@ from collections import defaultdict
 total_predictions = 0
 correct_predictions = 0
 iou_threshold = 0.1
-os.makedirs('/kaggle/working/visualizations/initial', exist_ok=True)
-os.makedirs('/kaggle/working/visualizations/final', exist_ok=True)
-os.makedirs('/kaggle/working/visualizations/gt', exist_ok=True)
 
 def simple_nms(boxes, scores, iou_threshold=0):
     # Convert to tensor if needed
@@ -298,7 +295,7 @@ for image_path in os.listdir(image_dir):
     # Load image and initial prediction
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
     img_width, img_height = img.size
-    initial_results = model.predict(img, conf=0.25, verbose=False)
+    initial_results = model.predict(img, conf=0.25, verbose=True)
     initial_img = img.copy()  
     draw_initial = ImageDraw.Draw(initial_img)
     result = initial_results[0]
