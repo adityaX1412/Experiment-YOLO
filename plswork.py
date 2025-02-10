@@ -154,13 +154,13 @@ def perform_double_inference(image_path, model, original_detection):
                 continue
                 
             current_iou = calculate_iou(original_detection['bbox'], box)
-            combined_score = (conf * 0.5) + (current_iou * 0.5)  # Weighted combination
+            combined_score = (conf * 0.1) + (current_iou * 0.9)  # Weighted combination
             
             if combined_score > best_combined and current_iou >= 0.25:
                 best_combined = combined_score
                 best_conf = conf
                 best_match = {
-                    'bbox': [x1, y1, x2, y2],
+                    'bbox': box.tolist(),
                     'score': float(conf),
                     'category_id': int(label)
                 }
