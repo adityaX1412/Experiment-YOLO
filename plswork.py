@@ -13,14 +13,14 @@ from dub_inf_utils import *
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
-MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdnwuloss.pt"
+MODEL_WEIGHTS = "/kaggle/input/ld70-waid-weight/best (3).pt"
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
 
 model = YOLO(MODEL_WEIGHTS)
 
-predictions_path = "/kaggle/input/json-files/spdnwuloss.json"
+predictions_path = "/kaggle/input/ld70-json/predictions (1).json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
 
