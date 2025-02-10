@@ -329,11 +329,11 @@ def perform_double_inference(image_path, model, original_detection):
     best_conf = -1
     best_iou = -1
     
-    for box, label, conf in zip(original_detection['bbox'], labels, confs):
+    for box, label, conf in zip(scaled_boxes, labels, confs):
         if label != original_label:
             continue
             
-        current_iou = calculate_iou([x1, y1, x2, y2], box)
+        current_iou = calculate_iou(original_detection['bbox'], box)
         if conf > best_conf and current_iou >= 0.25:
             best_conf = conf
             best_iou = current_iou
