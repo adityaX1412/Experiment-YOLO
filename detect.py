@@ -10,5 +10,5 @@ if __name__ == '__main__':
                   name='exp',
                   save=True,
                   # conf=0.2,
-                  visualize=True # visualize model features maps
+                  visualize=False # visualize model features maps
                 )
