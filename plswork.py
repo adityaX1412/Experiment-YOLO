@@ -137,29 +137,32 @@ def perform_double_inference(image_path, model, original_detection):
         scale_y,
         crop_info
     )
-    
-    # Find best matching detection
-    best_match = None
-    best_conf = -1
-    best_iou = -1
-    
-    # Compare each new detection with original
-    for box, label, conf in zip(scaled_boxes, labels, confs):
-        # Only consider detections of same class
-        if label != original_label:
+
+    for box in scaled_boxes:
+        if (box[2] <= box[0]) or (box[3] <= box[1]) or \
+        (box[0] < 0) or (box[1] < 0) or \
+        (box[2] > img_width) or (box[3] > img_height):
             continue
-            
-        current_iou = calculate_iou(original_detection['bbox'], box)
-        # Update best match if confidence is higher and IOU is sufficient
-        if conf > best_conf and current_iou >= 0.25:
-            best_conf = conf
-            best_iou = current_iou
-            best_match = {
-                'bbox': [x1, y1, x2, y2],
-                'score': float(conf),  # Convert to Python float
-                'category_id': int(label)  # Convert to Python int
-            }
     
+        # Find best matching detection
+        best_match = None
+        best_combined = -1
+
+        for box, label, conf in zip(scaled_boxes, labels, confs):
+            if label != original_label:
+                continue
+                
+            current_iou = calculate_iou(original_detection['bbox'], box)
+            combined_score = (conf * 0.7) + (current_iou * 0.3)  # Weighted combination
+            
+            if combined_score > best_combined and current_iou >= 0.25:
+                best_combined = combined_score
+                best_match = {
+                    'bbox': box.tolist(),
+                    'score': float(conf),
+                    'category_id': int(label)
+                }
+        
     # Return refined detection only if it improves on original
     return best_match if best_conf > original_score else None
 
