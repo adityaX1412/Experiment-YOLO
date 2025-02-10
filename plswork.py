@@ -312,7 +312,7 @@ def perform_double_inference(image_path, model, original_detection):
     # Process and scale detections
     #boxes = new_results[0].boxes.xyxy.cpu().numpy()
     #if boxes.ndim == 1:
-       # boxes = np.expand_dims(boxes, axis=0)
+       #boxes = np.expand_dims(boxes, axis=0)
         
     confs = new_results[0].boxes.conf.cpu().numpy()
     labels = new_results[0].boxes.cls.cpu().numpy().astype(int)
@@ -329,7 +329,7 @@ def perform_double_inference(image_path, model, original_detection):
     best_conf = -1
     best_iou = -1
     
-    for box, label, conf in zip(boxes, labels, confs):
+    for box, label, conf in zip(original_detection['bbox'], labels, confs):
         if label != original_label:
             continue
             
@@ -338,7 +338,7 @@ def perform_double_inference(image_path, model, original_detection):
             best_conf = conf
             best_iou = current_iou
             best_match = {
-                #'bbox': box.tolist(),
+                'bbox': box.tolist(),
                 'score': conf,
                 'category_id': label
             }
@@ -411,13 +411,13 @@ for image_path in os.listdir(IMAGE_DIR):
         current_predictions['labels'][i] = candidate['label']
     
     # Apply NMS to remove overlapping boxes
-    current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
+    """current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
         non_max_suppression(
             current_predictions['boxes'],
             current_predictions['scores'],
             current_predictions['labels'],
             NMS_IOU_THRESHOLD
-        )
+        )"""
 
     # Update prediction counters
     total_predictions += len(current_predictions['boxes'])
