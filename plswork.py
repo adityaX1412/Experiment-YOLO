@@ -398,7 +398,7 @@ for image_path in os.listdir(IMAGE_DIR):
         if refined:
             replacement_candidates.append({
                 'idx': idx,
-                'bbox': refined['bbox'],
+                'bbox': current_predictions['boxes'][idx],
                 'score': refined['score'],
                 'label': refined['category_id']
             })
