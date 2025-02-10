@@ -18,6 +18,8 @@ from thop import profile
 
 
 #counting the next 3
+total_refinement_attempts = 0
+successful_refinements = 0
 total_predictions = 0
 correct_predictions = 0
 iou_threshold = 0.1
@@ -366,11 +368,14 @@ for image_path in os.listdir(image_dir):
         rw, rh = 0, 0
 
     # Refinement pass
+    refinement_attempts_for_image = 0
+    successful_refinements_for_image = 0
     replacement_candidates = []
     for i in range(len(predictions['scores'])):
         if predictions['scores'][i] >= conf_threshold or rw == 0 or rh == 0:
             continue
-        
+        total_refinement_attempts += 1
+        refinement_attempts_for_image += 1
         best_match = None
         best_iou = -1
         best_conf = -1
@@ -459,6 +464,8 @@ for image_path in os.listdir(image_dir):
         if best_match is not None:
             min_iou_threshold = 0.25  # Adjust based on your use case
             if best_iou >= min_iou_threshold and best_conf > original_score:
+                successful_refinements += 1
+                successful_refinements_for_image += 1
                 replacement_candidates.append({
                     'idx': i,
                     'box': best_match.tolist(),
@@ -593,8 +600,9 @@ map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_target
 avg_inference_time = get_average_inference_time()
 avg_gflops = get_average_gflops()
 
-print(f"✅ Average Inference Time: {avg_inference_time:.2f} ms")
-print(f"✅ NO. of instances: {len(inference_times):.2f}")
+print(f"Total Refinement Attempts: {total_refinement_attempts}")
+print(f"Successful Refinements: {successful_refinements}")
+print(f"Refinement Success Rate: {successful_refinements / total_refinement_attempts * 100:.2f}%")
 print(f"calculated Precision: {precision:.4f}")
 print(f"calculated Recall: {recall:.4f}")
 print(f"mAP@0.5: {map50:.4f}")
