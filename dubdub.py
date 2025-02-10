@@ -26,15 +26,12 @@ iou_threshold = 0.1
 
 # Track inference times and GFLOPs
 inference_times = []
-gflops_values = []
+
 
 def get_average_inference_time():
     """Compute and return the average inference time in milliseconds."""
     return np.mean(inference_times) if inference_times else 0
 
-def get_average_gflops():
-    """Compute and return the average GFLOPs."""
-    return np.mean(gflops_values) if gflops_values else 0
 
 def simple_nms(boxes, scores, iou_threshold=0):
     # Convert to tensor if needed
@@ -320,12 +317,6 @@ for image_path in os.listdir(image_dir):
     initial_results = model.predict(img, conf=0.25, verbose=False)
     inference_time = (time.time() - start_time) * 1000  # Convert to ms
     inference_times.append(inference_time)
-    try:
-        flops, params = profile(model, inputs=(input_tensor,))
-        gflops = flops / 1e9  # Convert to GFLOPs
-        gflops_values.append(gflops)
-    except Exception as e:
-        print(f"⚠️ GFLOPs computation error: {str(e)}")
     initial_img = img.copy()  
     draw_initial = ImageDraw.Draw(initial_img)
     result = initial_results[0]
@@ -562,7 +553,7 @@ for image_path in os.listdir(image_dir):
             img_correct += 1
             used_truth_indices.append(best_truth_idx)
         preds = [{
-        'boxes': torch.tensor(filtered_predictions['boxes']),
+        #'boxes': torch.tensor(filtered_predictions['boxes']),
         'scores': torch.tensor(filtered_predictions['scores']),
         'labels': torch.tensor(filtered_predictions['labels']),
         }]
@@ -598,7 +589,6 @@ map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_target
 
 # Compute final averages
 avg_inference_time = get_average_inference_time()
-avg_gflops = get_average_gflops()
 
 print(f"Total Refinement Attempts: {total_refinement_attempts}")
 print(f"Successful Refinements: {successful_refinements}")
