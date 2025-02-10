@@ -17,7 +17,6 @@ MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdnwuloss.pt"
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
-DOUBLE_INFERENCE_THRESHOLD = 0.1 
 
 model = YOLO(MODEL_WEIGHTS)
 
@@ -156,7 +155,7 @@ def perform_double_inference(image_path, model, original_detection):
             best_conf = conf
             best_iou = current_iou
             best_match = {
-                'bbox': box.tolist(),
+                'bbox': [x1, y1, x2, y2],
                 'score': float(conf),  # Convert to Python float
                 'category_id': int(label)  # Convert to Python int
             }
