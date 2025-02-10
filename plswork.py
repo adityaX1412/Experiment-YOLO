@@ -64,6 +64,11 @@ def non_max_suppression(boxes, scores, labels, iou_threshold):
     if len(boxes) == 0:
         return [], [], []
     
+    # Ensure all boxes have exactly 4 elements
+    boxes = [box for box in boxes if len(box) == 4]
+    if len(boxes) == 0:
+        return [], [], []
+    
     indices = np.argsort(scores)[::-1]
     boxes = np.array(boxes)
     keep = []
