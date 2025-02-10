@@ -8,7 +8,8 @@ if __name__ == '__main__':
                   imgsz=640,
                   project='runs/detect',
                   name='exp',
-                  save=True,
+                  verbose = True
+                  #save=True,
                   # conf=0.2,
-                  visualize=False # visualize model features maps
+                  #visualize=False # visualize model features maps
                 )
