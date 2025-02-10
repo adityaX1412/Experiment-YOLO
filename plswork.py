@@ -305,7 +305,6 @@ def perform_double_inference(image_path, model, original_detection):
     with torch.no_grad():
         new_results = model.predict(padded_img, verbose=False, augment=True)
 
-    
     if len(new_results[0].boxes) == 0:
         return None
 
@@ -342,6 +341,7 @@ def perform_double_inference(image_path, model, original_detection):
                 'score': conf,
                 'category_id': label
             }
+    
     return best_match if best_conf > original_score else None
 
 # Initialize metrics
