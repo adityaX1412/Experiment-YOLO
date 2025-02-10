@@ -24,38 +24,6 @@ DOUBLE_INFERENCE_THRESHOLD = 0.1
 
 model = YOLO(MODEL_WEIGHTS)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()]  # Explicitly direct to standard stream
-)
-logger = logging.getLogger(__name__)
-logger.info("✅ Logging setup complete - this should appear in console")
-
-# Console handler (real-time logging)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-
-# Log format
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-
-# Attach handler (Console only, No File)
-logger.addHandler(console_handler)
-
-# Define the save paths in Kaggle working directory
-VISUALIZATION_DIR = "/kaggle/working/visualizations"
-INITIAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "initial")
-FINAL_VIS_DIR = os.path.join(VISUALIZATION_DIR, "final")
-
-# Create directories if they don't exist
-os.makedirs(INITIAL_VIS_DIR, exist_ok=True)
-os.makedirs(FINAL_VIS_DIR, exist_ok=True)
-
-# Add tracking variables for inference statistics
-inference_times = []
-gflops_values = []
-
 predictions_path = "/kaggle/input/json-files/spdnwuloss.json"
 if not os.path.exists(predictions_path):
     raise FileNotFoundError(f"❌ Predictions file not found at {predictions_path}")
@@ -111,38 +79,6 @@ def non_max_suppression(boxes, scores, labels, iou_threshold):
         indices = indices[1:][ious < iou_threshold]
 
     return boxes[keep].tolist(), [scores[i] for i in keep], [labels[i] for i in keep]
-
-def save_visualizations(image_path, img, predictions, filtered_predictions, model):
-    """Save visualizations of initial and final detections."""
-    base_name = os.path.splitext(os.path.basename(image_path))[0]
-
-    # Copy original image
-    initial_img = img.copy()
-    draw_initial = ImageDraw.Draw(initial_img)
-
-    # Draw initial predictions (red boxes)
-    for box, score, label in zip(predictions['boxes'], predictions['scores'], predictions['labels']):
-        x1, y1, x2, y2 = box
-        draw_initial.rectangle([x1, y1, x2, y2], outline="red", width=2)
-        label_text = f"{model.names[label]}: {score:.2f}"
-        draw_initial.text((x1, y1 - 10), label_text, fill="red")
-
-    # Copy again for final visualization
-    final_img = img.copy()
-    draw_final = ImageDraw.Draw(final_img)
-
-    # Draw final predictions (green boxes)
-    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
-        x1, y1, x2, y2 = box
-        draw_final.rectangle([x1, y1, x2, y2], outline="green", width=2)
-        label_text = f"{model.names[label]}: {score:.2f}"
-        draw_final.text((x1, y1 - 10), label_text, fill="green")
-
-    # Save images in Kaggle working directory
-    initial_img.save(os.path.join(INITIAL_VIS_DIR, f"{base_name}_initial.jpg"))
-    final_img.save(os.path.join(FINAL_VIS_DIR, f"{base_name}_final.jpg"))
-
-    print(f"✅ Saved visualizations for {image_path} in Kaggle working directory.")
 
 def calculate_precision_recall(all_predictions, all_targets):
     """
@@ -366,25 +302,9 @@ def perform_double_inference(image_path, model, original_detection):
     padded_img = Image.new("RGB", (640, 640), (114, 114, 114))
     pad_x, pad_y = (640 - new_size[0])//2, (640 - new_size[1])//2
     padded_img.paste(resized, (pad_x, pad_y))
-
-    # Convert to tensor for GFLOPs calculation
-    input_tensor = ToTensor()(padded_img).unsqueeze(0).to("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Compute GFLOPs and Params
-    try:
-        flops, params = profile(model, inputs=(input_tensor,))
-        gflops = flops / 1e9  # Convert FLOPs to GFLOPs
-        gflops_values.append(gflops)
-    except Exception as e:
-        print(f"⚠️ GFLOPs computation error: {str(e)}")
-        gflops = None
-
-    # Measure inference time
-    start_time = time.time()
     with torch.no_grad():
         new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD, verbose=True, augment=True)
-    inference_time = (time.time() - start_time) * 1000  # Convert to ms
-    inference_times.append(inference_time)
+
     
     if len(new_results[0].boxes) == 0:
         return None
@@ -409,7 +329,7 @@ def perform_double_inference(image_path, model, original_detection):
     best_conf = -1
     best_iou = -1
     
-    for box, label, conf in zip(scaled_boxes, labels, confs):
+    for box, label, conf in zip(boxes, labels, confs):
         if label != original_label:
             continue
             
@@ -422,49 +342,6 @@ def perform_double_inference(image_path, model, original_detection):
                 'score': conf,
                 'category_id': label
             }
-
-    # Visualization
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    
-    # Original Image
-    axes[0].imshow(img)
-    axes[0].add_patch(plt.Rectangle((x1, y1), sw, sh, fill=False, edgecolor='red', linewidth=2))
-    axes[0].set_title("Original Image with Detection")
-    
-    # Cropped and Processed Image
-    axes[1].imshow(padded_img)
-    for box in scaled_boxes:
-        bx1, by1, bx2, by2 = box
-        axes[1].add_patch(plt.Rectangle((bx1, by1), bx2 - bx1, by2 - by1, fill=False, edgecolor='blue', linewidth=2))
-    axes[1].set_title("Double Inference Image")
-    
-    # Save visualizations
-    base_name = os.path.splitext(os.path.basename(image_path))[0]
-    plt.savefig(os.path.join(FINAL_VIS_DIR, f'{base_name}_comparison.jpg'))
-    plt.close()
-
-    # Save individual images
-    img_with_box = img.copy()
-    plt.figure()
-    plt.imshow(img_with_box)
-    plt.gca().add_patch(plt.Rectangle((x1, y1), sw, sh, fill=False, edgecolor='red', linewidth=2))
-    plt.axis('off')
-    plt.savefig(os.path.join(INITIAL_VIS_DIR, f'{base_name}_initial.jpg'), bbox_inches='tight', pad_inches=0)
-    plt.close()
-
-    processed_img = padded_img.copy()
-    plt.figure()
-    plt.imshow(processed_img)
-    for box in scaled_boxes:
-        bx1, by1, bx2, by2 = box
-        plt.gca().add_patch(plt.Rectangle((bx1, by1), bx2 - bx1, by2 - by1, fill=False, edgecolor='blue', linewidth=2))
-    plt.axis('off')
-    plt.savefig(os.path.join(FINAL_VIS_DIR, f'{base_name}_final.jpg'), bbox_inches='tight', pad_inches=0)
-    plt.close()
-
-    logger.info(f"⏱️ Inference Time: {inference_time:.2f} ms")
-    logger.info(f"⚡ GFLOPs: {gflops:.2f}" if gflops else "⚠️ GFLOPs computation failed.")
-
     return best_match if best_conf > original_score else None
 
 # Initialize metrics
@@ -517,11 +394,6 @@ for image_path in os.listdir(IMAGE_DIR):
             model,
             original_detection
         )
-
-        if refined:
-            logger.info(f"Refined prediction found (new score={refined['score']:.2f})")
-        else:
-            logger.info("No refinement found")
         
         if refined:
             replacement_candidates.append({
