@@ -553,7 +553,7 @@ for image_path in os.listdir(image_dir):
             img_correct += 1
             used_truth_indices.append(best_truth_idx)
         preds = [{
-        #'boxes': torch.tensor(filtered_predictions['boxes']),
+        'boxes': torch.tensor(predictions['boxes']),
         'scores': torch.tensor(filtered_predictions['scores']),
         'labels': torch.tensor(filtered_predictions['labels']),
         }]
