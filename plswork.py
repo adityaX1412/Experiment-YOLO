@@ -303,7 +303,7 @@ def perform_double_inference(image_path, model, original_detection):
     pad_x, pad_y = (640 - new_size[0])//2, (640 - new_size[1])//2
     padded_img.paste(resized, (pad_x, pad_y))
     with torch.no_grad():
-        new_results = model.predict(padded_img, conf=DOUBLE_INFERENCE_THRESHOLD, verbose=True, augment=True)
+        new_results = model.predict(padded_img, verbose=True, augment=True)
 
     
     if len(new_results[0].boxes) == 0:
@@ -379,45 +379,43 @@ for image_path in os.listdir(IMAGE_DIR):
     replacement_candidates = []
     for idx in range(len(current_predictions['scores'])):
         if current_predictions['scores'][idx] >= CONF_THRESHOLD:
-            continue
-            
-        # Create detection object matching JSON format
-        original_detection = {
-            'bbox': current_predictions['boxes'][idx],
-            'score': current_predictions['scores'][idx],
-            'category_id': current_predictions['labels'][idx]
-        }
-        
-        # Perform double inference
-        refined = perform_double_inference(
-            os.path.join(IMAGE_DIR, image_path),
-            model,
-            original_detection
-        )
-        
-        if refined:
-            replacement_candidates.append({
-                'idx': idx,
+            # Create detection object matching JSON format
+            original_detection = {
                 'bbox': current_predictions['boxes'][idx],
-                'score': refined['score'],
-                'label': refined['category_id']
-            })
-    
-    # Apply replacements
-    for candidate in replacement_candidates:
-        i = candidate['idx']
-        current_predictions['boxes'][i] = candidate['bbox']
-        current_predictions['scores'][i] = candidate['score']
-        current_predictions['labels'][i] = candidate['label']
-    
-    # Apply NMS to remove overlapping boxes
-    """current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
-        non_max_suppression(
-            current_predictions['boxes'],
-            current_predictions['scores'],
-            current_predictions['labels'],
-            NMS_IOU_THRESHOLD
-        )"""
+                'score': current_predictions['scores'][idx],
+                'category_id': current_predictions['labels'][idx]
+            }
+            
+            # Perform double inference
+            refined = perform_double_inference(
+                os.path.join(IMAGE_DIR, image_path),
+                model,
+                original_detection
+            )
+            
+            if refined:
+                replacement_candidates.append({
+                    'idx': idx,
+                    'bbox': refined['boxes'][idx],
+                    'score': refined['score'],
+                    'label': refined['category_id']
+                })
+        
+        # Apply replacements
+        for candidate in replacement_candidates:
+            i = candidate['idx']
+            current_predictions['boxes'][i] = candidate['bbox']
+            current_predictions['scores'][i] = candidate['score']
+            current_predictions['labels'][i] = candidate['label']
+        
+        # Apply NMS to remove overlapping boxes
+        current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
+            non_max_suppression(
+                current_predictions['boxes'],
+                current_predictions['scores'],
+                current_predictions['labels'],
+                NMS_IOU_THRESHOLD
+            )
 
     # Update prediction counters
     total_predictions += len(current_predictions['boxes'])
@@ -474,8 +472,6 @@ print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
 print(f"Calculated mAP@50 : {map50:.4f}")
 print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
 print(f"Calculated mAP@50-95: {map50_95:.4f}")
-print(f"Recall: {final_metrics['mar_100']:.4f}")
-print(f"Precision: {final_metrics['precision'].mean():.4f}")
 print(f"calculated Precision: {precision:.4f}")
 print(f"calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
