@@ -154,7 +154,7 @@ def perform_double_inference(image_path, model, original_detection):
                 continue
                 
             current_iou = calculate_iou(original_detection['bbox'], box)
-            combined_score = (conf * 0.7) + (current_iou * 0.3)  # Weighted combination
+            combined_score = (conf * 0.5) + (current_iou * 0.5)  # Weighted combination
             
             if combined_score > best_combined and current_iou >= 0.25:
                 best_combined = combined_score
