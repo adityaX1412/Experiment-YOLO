@@ -310,9 +310,9 @@ def perform_double_inference(image_path, model, original_detection):
         return None
 
     # Process and scale detections
-    #boxes = new_results[0].boxes.xyxy.cpu().numpy()
-    #if boxes.ndim == 1:
-       #boxes = np.expand_dims(boxes, axis=0)
+    boxes = new_results[0].boxes.xyxy.cpu().numpy()
+    if boxes.ndim == 1:
+       boxes = np.expand_dims(boxes, axis=0)
         
     confs = new_results[0].boxes.conf.cpu().numpy()
     labels = new_results[0].boxes.cls.cpu().numpy().astype(int)
