@@ -160,7 +160,7 @@ def perform_double_inference(image_path, model, original_detection):
                 best_combined = combined_score
                 best_conf = conf
                 best_match = {
-                    'bbox': box.tolist(),
+                    'bbox': [x1, y1, x2, y2],
                     'score': float(conf),
                     'category_id': int(label)
                 }
