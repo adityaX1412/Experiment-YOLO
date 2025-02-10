@@ -414,13 +414,13 @@ for image_path in os.listdir(IMAGE_DIR):
             current_predictions['labels'][i] = candidate['label']
         
         # Apply NMS to remove overlapping boxes
-        current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
+        """current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
             non_max_suppression(
                 current_predictions['boxes'],
                 current_predictions['scores'],
                 current_predictions['labels'],
                 NMS_IOU_THRESHOLD
-            )
+            )"""
 
     # Update prediction counters
     total_predictions += len(current_predictions['boxes'])
