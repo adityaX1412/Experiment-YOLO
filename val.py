@@ -10,7 +10,7 @@ if __name__ == '__main__':
               imgsz=640,
               batch=16,
               # rect=False,
-              save_json=False, # if you need to cal coco metrice
+              #save_json=False, # if you need to cal coco metrice
               project='runs/val',
               name='yolov8n-spdnosoap',
               )
