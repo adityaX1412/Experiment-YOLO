@@ -8,10 +8,6 @@ import json
 from collections import defaultdict
 import time
 import logging
-import matplotlib.pyplot as plt
-from thop import profile
-from torchvision.transforms import ToTensor
-from PIL import ImageDraw
 from dub_inf_utils import *
 
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
@@ -40,7 +36,7 @@ for pred in val_predictions:
         image_predictions[image_name] = {"boxes": [], "scores": [], "labels": []}
     
     # Only add predictions above confidence threshold
-    if CONF_THRESHOLD <= pred["score"]:
+    if pred["score"] >= CONF_THRESHOLD:  # Compare single values, not lists
         x, y, w, h = pred["bbox"]
         x1, y1, x2, y2 = x, y, x + w, y + h
         image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
@@ -48,85 +44,128 @@ for pred in val_predictions:
         image_predictions[image_name]["labels"].append(pred["category_id"])
 
 def perform_double_inference(image_path, model, original_detection):
-    """Perform double inference with inference time, GFLOPs, and visualizations."""
+    """
+    Perform double inference with inference time, GFLOPs, and visualizations.
+    
+    Args:
+        image_path: Path to the original image
+        model: YOLO model instance
+        original_detection: Dictionary containing original detection info
+            {'bbox': [x1, y1, x2, y2], 'score': float, 'category_id': int}
+            
+    Returns:
+        Dictionary with refined detection or None if no improvement
+    """
     img = Image.open(image_path).convert("RGB")
     img_width, img_height = img.size
     
     # Extract detection details
     x1, y1, x2, y2 = original_detection['bbox']
-    sw = x2 - x1
-    sh = y2 - y1
+    sw = x2 - x1  # width of detection
+    sh = y2 - y1  # height of detection
     original_score = original_detection['score']
     original_label = original_detection['category_id']
     
-    # Adaptive cropping
-    cx, cy = (x1 + x2)/2, (y1 + y2)/2
-    desired_width = (sw * 640) / (x2 - x1) if (x2 - x1) != 0 else 640
-    desired_height = (sh * 640) / (y2 - y1) if (y2 - y1) != 0 else 640
-    
-    new_x1 = max(0, int(cx - desired_width/2))
-    new_y1 = max(0, int(cy - desired_height/2))
-    new_x2 = min(img_width, int(cx + desired_width/2))
-    new_y2 = min(img_height, int(cy + desired_height/2))
-    
-    if (new_x2 <= new_x1) or (new_y2 <= new_y1):
+    # Early exit if box dimensions are invalid
+    if sw <= 0 or sh <= 0:
         return None
-
-    # Crop and resize
+    
+    # Calculate adaptive crop region
+    cx, cy = (x1 + x2)/2, (y1 + y2)/2  # center of detection
+    
+    # Calculate desired dimensions for the crop
+    # Use target size of 640 and maintain aspect ratio
+    scale = min(640/sw, 640/sh)
+    desired_width = sw * scale
+    desired_height = sh * scale
+    
+    # Calculate crop boundaries with padding
+    pad_factor = 0.2  # 20% padding around detection
+    new_x1 = max(0, int(cx - (desired_width * (1 + pad_factor))/2))
+    new_y1 = max(0, int(cy - (desired_height * (1 + pad_factor))/2))
+    new_x2 = min(img_width, int(cx + (desired_width * (1 + pad_factor))/2))
+    new_y2 = min(img_height, int(cy + (desired_height * (1 + pad_factor))/2))
+    
+    # Check if crop region is valid
+    if new_x2 <= new_x1 or new_y2 <= new_y1:
+        return None
+        
+    # Perform crop and resize
     crop = img.crop((new_x1, new_y1, new_x2, new_y2))
     original_w, original_h = crop.size
     ratio = min(640/original_w, 640/original_h)
     new_size = (int(original_w*ratio), int(original_h*ratio))
     resized = crop.resize(new_size, Image.BILINEAR)
     
-    # Pad to 640x640
+    # Create padded image
     padded_img = Image.new("RGB", (640, 640), (114, 114, 114))
-    pad_x, pad_y = (640 - new_size[0])//2, (640 - new_size[1])//2
+    pad_x = (640 - new_size[0])//2
+    pad_y = (640 - new_size[1])//2
     padded_img.paste(resized, (pad_x, pad_y))
+    
+    # Perform second inference with test time augmentation
     with torch.no_grad():
         new_results = model.predict(padded_img, verbose=False, augment=True)
-
+        
+    # Check if any detections were made
     if len(new_results[0].boxes) == 0:
         return None
-
-    # Process and scale detections
+        
+    # Extract and process detections
     boxes = new_results[0].boxes.xyxy.cpu().numpy()
     if boxes.ndim == 1:
-       boxes = np.expand_dims(boxes, axis=0)
+        boxes = np.expand_dims(boxes, axis=0)
         
     confs = new_results[0].boxes.conf.cpu().numpy()
     labels = new_results[0].boxes.cls.cpu().numpy().astype(int)
     
-    # Scale boxes
+    # Calculate scaling factors
     scale_x = (new_x2 - new_x1) / new_size[0]
     scale_y = (new_y2 - new_y1) / new_size[1]
+    
+    # Scale boxes back to original image coordinates
+    crop_info = {
+        'x1': new_x1,
+        'y1': new_y1,
+        'resized_w': new_size[0],
+        'resized_h': new_size[1]
+    }
     scaled_boxes = scale_boxes(
-        boxes.copy(), pad_x, pad_y, scale_x, scale_y,
-        {'x1': new_x1, 'y1': new_y1, 'resized_w': new_size[0], 'resized_h': new_size[1]}
+        boxes.copy(),
+        pad_x,
+        pad_y,
+        scale_x,
+        scale_y,
+        crop_info
     )
     
+    # Find best matching detection
     best_match = None
     best_conf = -1
     best_iou = -1
     
+    # Compare each new detection with original
     for box, label, conf in zip(scaled_boxes, labels, confs):
+        # Only consider detections of same class
         if label != original_label:
             continue
             
         current_iou = calculate_iou(original_detection['bbox'], box)
+        # Update best match if confidence is higher and IOU is sufficient
         if conf > best_conf and current_iou >= 0.25:
             best_conf = conf
             best_iou = current_iou
             best_match = {
                 'bbox': box.tolist(),
-                'score': conf,
-                'category_id': label
+                'score': float(conf),  # Convert to Python float
+                'category_id': int(label)  # Convert to Python int
             }
     
+    # Return refined detection only if it improves on original
     return best_match if best_conf > original_score else None
 
 # Initialize metrics
-metric = MeanAveragePrecision(class_metrics=True,extended_summary=True)
+metric = MeanAveragePrecision(class_metrics=True, extended_summary=True)
 total_predictions = 0
 correct_predictions = 0
 all_predictions = []
@@ -158,8 +197,10 @@ for image_path in os.listdir(IMAGE_DIR):
     
     # Process each prediction for potential refinement
     replacement_candidates = []
+    
+    # Iterate through predictions using index
     for idx in range(len(current_predictions['scores'])):
-        if current_predictions['scores'] >= CONF_THRESHOLD:
+        if current_predictions['scores'][idx] >= CONF_THRESHOLD:  # Compare single values
             # Create detection object matching JSON format
             original_detection = {
                 'bbox': current_predictions['boxes'][idx],
@@ -174,21 +215,23 @@ for image_path in os.listdir(IMAGE_DIR):
                 original_detection
             )
             
-            if refined:
+            if refined is not None:  # Check for None explicitly
                 replacement_candidates.append({
                     'idx': idx,
                     'bbox': refined['bbox'],
                     'score': refined['score'],
                     'label': refined['category_id']
                 })
-        
-        # Apply replacements
-        for candidate in replacement_candidates:
-            i = candidate['idx']
-            current_predictions['boxes'][i] = candidate['bbox']
-            current_predictions['scores'][i] = candidate['score']
-            current_predictions['labels'][i] = candidate['label']
-        
+    
+    # Apply replacements
+    for candidate in replacement_candidates:
+        i = candidate['idx']
+        current_predictions['boxes'][i] = candidate['bbox']
+        current_predictions['scores'][i] = candidate['score']
+        current_predictions['labels'][i] = candidate['label']
+    
+    # Only apply NMS if there are predictions
+    if current_predictions['boxes'] and current_predictions['scores'] and current_predictions['labels']:
         # Apply NMS to remove overlapping boxes
         current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
             non_max_suppression(
@@ -228,29 +271,29 @@ for image_path in os.listdir(IMAGE_DIR):
             correct_predictions += 1
             matched_gt.add(best_gt_idx)
 
-    # Prepare for mAP evaluation
-    preds = [{
-        'boxes': torch.tensor(current_predictions['boxes']),
-        'scores': torch.tensor(current_predictions['scores']),
-        'labels': torch.tensor(current_predictions['labels']),
-    }]
-    targets = [{
-        'boxes': torch.tensor(true_boxes),
-        'labels': torch.tensor(true_labels),
-    }]
-    all_predictions.extend(preds)
-    all_targets.extend(targets)
-    metric.update(preds, targets)
+    # Convert boxes and labels to tensors for metrics
+    if current_predictions['boxes'] and true_boxes:  # Only add if there are predictions and ground truth
+        preds = [{
+            'boxes': torch.tensor(current_predictions['boxes']),
+            'scores': torch.tensor(current_predictions['scores']),
+            'labels': torch.tensor(current_predictions['labels']),
+        }]
+        targets = [{
+            'boxes': torch.tensor(true_boxes),
+            'labels': torch.tensor(true_labels),
+        }]
+        all_predictions.extend(preds)
+        all_targets.extend(targets)
+        metric.update(preds, targets)
 
 # Compute final metrics
 final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
-map50,class_aps = calculate_map(all_predictions, all_targets)
-
+map50, class_aps = calculate_map(all_predictions, all_targets, IOU_THRESHOLD)
 
 print(f"\nFinal Metrics:")
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
-print(f"Calculated mAP@50 : {map50:.4f}")
-print(f"calculated Precision: {precision:.4f}")
-print(f"calculated Recall: {recall:.4f}")
+print(f"Calculated mAP@50: {map50:.4f}")
+print(f"Calculated Precision: {precision:.4f}")
+print(f"Calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
