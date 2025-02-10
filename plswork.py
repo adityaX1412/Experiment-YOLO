@@ -159,7 +159,7 @@ for image_path in os.listdir(IMAGE_DIR):
     # Process each prediction for potential refinement
     replacement_candidates = []
     for idx in range(len(current_predictions['scores'])):
-        if current_predictions['scores'][idx] >= CONF_THRESHOLD:
+        if current_predictions['scores'] >= CONF_THRESHOLD:
             # Create detection object matching JSON format
             original_detection = {
                 'bbox': current_predictions['boxes'][idx],
@@ -245,16 +245,12 @@ for image_path in os.listdir(IMAGE_DIR):
 # Compute final metrics
 final_metrics = metric.compute()
 precision, recall = calculate_precision_recall(all_predictions, all_targets)
-map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
+map50,class_aps = calculate_map(all_predictions, all_targets)
 
 
 print(f"\nFinal Metrics:")
 print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
 print(f"Calculated mAP@50 : {map50:.4f}")
-print(f"mAP@0.5-0.95: {final_metrics['map']:.4f}")
-print(f"Calculated mAP@50-95: {map50_95:.4f}")
 print(f"calculated Precision: {precision:.4f}")
 print(f"calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
-#if total_predictions > 0:
-    #print(f"Accuracy: {correct_predictions/total_predictions:.4f}")
