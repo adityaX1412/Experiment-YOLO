@@ -303,7 +303,7 @@ def perform_double_inference(image_path, model, original_detection):
     pad_x, pad_y = (640 - new_size[0])//2, (640 - new_size[1])//2
     padded_img.paste(resized, (pad_x, pad_y))
     with torch.no_grad():
-        new_results = model.predict(padded_img, verbose=True, augment=True)
+        new_results = model.predict(padded_img, verbose=False, augment=True)
 
     
     if len(new_results[0].boxes) == 0:
