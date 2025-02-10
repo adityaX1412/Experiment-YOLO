@@ -147,6 +147,7 @@ def perform_double_inference(image_path, model, original_detection):
         # Find best matching detection
         best_match = None
         best_combined = -1
+        best_conf = -1
 
         for box, label, conf in zip(scaled_boxes, labels, confs):
             if label != original_label:
@@ -157,6 +158,7 @@ def perform_double_inference(image_path, model, original_detection):
             
             if combined_score > best_combined and current_iou >= 0.25:
                 best_combined = combined_score
+                best_conf = conf
                 best_match = {
                     'bbox': box.tolist(),
                     'score': float(conf),
