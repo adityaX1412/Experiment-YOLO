@@ -338,7 +338,7 @@ def perform_double_inference(image_path, model, original_detection):
             best_conf = conf
             best_iou = current_iou
             best_match = {
-                'bbox': box.tolist(),
+                #'bbox': box.tolist(),
                 'score': conf,
                 'category_id': label
             }
