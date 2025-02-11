@@ -154,13 +154,13 @@ def perform_double_inference(image_path, model, original_detection):
                 continue
                 
             current_iou = calculate_iou(original_detection['bbox'], box)
-            combined_score = (conf * 0.1) + (current_iou * 0.9)  # Weighted combination
+            combined_score = (conf * 0.5) + (current_iou * 0.5)  # Weighted combination
             
             if combined_score > best_combined and current_iou >= 0.25:
                 best_combined = combined_score
                 best_conf = conf
                 best_match = {
-                    'bbox': box.tolist(),
+                    'bbox': [x1, y1, x2, y2],
                     'score': float(conf),
                     'category_id': int(label)
                 }
@@ -198,76 +198,69 @@ for image_path in os.listdir(IMAGE_DIR):
         continue
         
     current_predictions = image_predictions[image_name]
-    high_conf_boxes = []
-    high_conf_scores = []
-    high_conf_labels = []
-    low_conf_boxes = []
-    low_conf_scores = []
-    low_conf_labels = []
     
-    # Split predictions based on confidence
-    for box, score, label in zip(current_predictions['boxes'], 
-                               current_predictions['scores'], 
-                               current_predictions['labels']):
-        if score >= 0.5:
-            high_conf_boxes.append(box)
-            high_conf_scores.append(score)
-            high_conf_labels.append(label)
-        else:
-            low_conf_boxes.append(box)
-            low_conf_scores.append(score)
-            low_conf_labels.append(label)
+    # Process each prediction for potential refinement
+    replacement_candidates = []
     
-    # Process low confidence predictions with double inference
-    refined_predictions = []
-    for idx in range(len(low_conf_boxes)):
-        original_detection = {
-            'bbox': low_conf_boxes[idx],
-            'score': low_conf_scores[idx],
-            'category_id': low_conf_labels[idx]
-        }
-        
-        refined = perform_double_inference(
-            os.path.join(IMAGE_DIR, image_path),
-            model,
-            original_detection
-        )
-        
-        if refined is not None:
-            refined_predictions.append(refined)
+    # Iterate through predictions using index
+    for idx in range(len(current_predictions['scores'])):
+        if CONF_THRESHOLD <= current_predictions['scores'][idx]<0.7 :  # Compare single values
+            # Create detection object matching JSON format
+            original_detection = {
+                'bbox': current_predictions['boxes'][idx],
+                'score': current_predictions['scores'][idx],
+                'category_id': current_predictions['labels'][idx]
+            }
+            
+            # Perform double inference
+            refined = perform_double_inference(
+                os.path.join(IMAGE_DIR, image_path),
+                model,
+                original_detection
+            )
+            
+            if refined is not None:  # Check for None explicitly
+                replacement_candidates.append({
+                    'idx': idx,
+                    'bbox': current_predictions['boxes'][idx],
+                    'score': refined['score'],
+                    'label': refined['category_id']
+                })
     
-    # Combine high confidence and refined predictions
-    final_boxes = []#high_conf_boxes[:]
-    final_scores = []#high_conf_scores[:]
-    final_labels = []#high_conf_labels[:]
+    # Apply replacements
+    for candidate in replacement_candidates:
+        i = candidate['idx']
+        current_predictions['boxes'][i] = candidate['bbox']
+        current_predictions['scores'][i] = candidate['score']
+        current_predictions['labels'][i] = candidate['label']
+    
+    # Only apply NMS if there are predictions
+    if current_predictions['boxes'] and current_predictions['scores'] and current_predictions['labels']:
+        # Apply NMS to remove overlapping boxes
+        current_predictions['boxes'], current_predictions['scores'], current_predictions['labels'] = \
+            non_max_suppression(
+                current_predictions['boxes'],
+                current_predictions['scores'],
+                current_predictions['labels'],
+                NMS_IOU_THRESHOLD
+            )
 
-    
-    for refined in refined_predictions:
-        final_boxes.append(refined['bbox'])
-        final_scores.append(refined['score'])
-        final_labels.append(refined['category_id'])
-    
-    # Apply NMS if there are any predictions
-    if final_boxes and final_scores and final_labels:
-        final_boxes, final_scores, final_labels = non_max_suppression(
-            final_boxes,
-            final_scores,
-            final_labels,
-            NMS_IOU_THRESHOLD
-        )
-    
     # Update prediction counters
-    total_predictions += len(final_boxes)
+    total_predictions += len(current_predictions['boxes'])
     
-    # Track matched ground truth boxes
+    # Track matched ground truth boxes to avoid double-counting
     matched_gt = set()
     
+    # Check each prediction against ground truth
     for i, (pred_box, pred_score, pred_label) in enumerate(zip(
-        final_boxes, final_scores, final_labels
+        current_predictions['boxes'], 
+        current_predictions['scores'], 
+        current_predictions['labels']
     )):
         best_iou = 0
         best_gt_idx = -1
         
+        # Find best matching ground truth box
         for gt_idx, (true_box, true_label) in enumerate(zip(true_boxes, true_labels)):
             if gt_idx in matched_gt:
                 continue
@@ -277,16 +270,17 @@ for image_path in os.listdir(IMAGE_DIR):
                 best_iou = iou
                 best_gt_idx = gt_idx
         
+        # If good match found, count as correct and mark ground truth as matched
         if best_iou >= IOU_THRESHOLD:
             correct_predictions += 1
             matched_gt.add(best_gt_idx)
 
     # Convert boxes and labels to tensors for metrics
-    if final_boxes and true_boxes:
+    if current_predictions['boxes'] and true_boxes:  # Only add if there are predictions and ground truth
         preds = [{
-            'boxes': torch.tensor(final_boxes),
-            'scores': torch.tensor(final_scores),
-            'labels': torch.tensor(final_labels),
+            'boxes': torch.tensor(current_predictions['boxes']),
+            'scores': torch.tensor(current_predictions['scores']),
+            'labels': torch.tensor(current_predictions['labels']),
         }]
         targets = [{
             'boxes': torch.tensor(true_boxes),
