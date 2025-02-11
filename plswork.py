@@ -160,7 +160,7 @@ def perform_double_inference(image_path, model, original_detection):
                 best_combined = combined_score
                 best_conf = conf
                 best_match = {
-                    'bbox': [x1, y1, x2, y2],
+                    'bbox': box.tolist(),
                     'score': float(conf),
                     'category_id': int(label)
                 }
@@ -198,34 +198,54 @@ for image_path in os.listdir(IMAGE_DIR):
         continue
         
     current_predictions = image_predictions[image_name]
+
+    # Create separate lists for high and low confidence predictions
+    high_conf_boxes = []
+    high_conf_scores = []
+    high_conf_labels = []
+    low_conf_boxes = []
+    low_conf_scores = []
+    low_conf_labels = []
+    
+    # Split predictions based on confidence
+    for box, score, label in zip(current_predictions['boxes'], 
+                               current_predictions['scores'], 
+                               current_predictions['labels']):
+        if score >= 0.5:
+            high_conf_boxes.append(box)
+            high_conf_scores.append(score)
+            high_conf_labels.append(label)
+        else:
+            low_conf_boxes.append(box)
+            low_conf_scores.append(score)
+            low_conf_labels.append(label)
     
     # Process each prediction for potential refinement
     replacement_candidates = []
     
     # Iterate through predictions using index
-    for idx in range(len(current_predictions['scores'])):
-        if CONF_THRESHOLD <= current_predictions['scores'][idx]<0.7 :  # Compare single values
-            # Create detection object matching JSON format
-            original_detection = {
-                'bbox': current_predictions['boxes'][idx],
-                'score': current_predictions['scores'][idx],
-                'category_id': current_predictions['labels'][idx]
-            }
-            
-            # Perform double inference
-            refined = perform_double_inference(
-                os.path.join(IMAGE_DIR, image_path),
-                model,
-                original_detection
-            )
-            
-            if refined is not None:  # Check for None explicitly
-                replacement_candidates.append({
-                    'idx': idx,
-                    'bbox': current_predictions['boxes'][idx],
-                    'score': refined['score'],
-                    'label': refined['category_id']
-                })
+    for idx in range(len(low_conf_boxes)): 
+        # Create detection object matching JSON format
+        original_detection = {
+        'bbox': low_conf_boxes[idx],
+        'score': low_conf_scores[idx],
+        'category_id': low_conf_labels[idx]
+        }
+        
+        # Perform double inference
+        refined = perform_double_inference(
+            os.path.join(IMAGE_DIR, image_path),
+            model,
+            original_detection
+        )
+        
+        if refined is not None:  # Check for None explicitly
+            replacement_candidates.append({
+                'idx': idx,
+                'bbox': refined['bbox'],
+                'score': refined['score'],
+                'label': refined['category_id']
+            })
     
     # Apply replacements
     for candidate in replacement_candidates:
