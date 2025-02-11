@@ -11,9 +11,8 @@ import yaml
 from torch.autograd import Variable
 from torchmetrics.detection import MeanAveragePrecision
 from collections import defaultdict
-import time
-from thop import profile
 
+#counting the next 3
 total_predictions = 0
 correct_predictions = 0
 iou_threshold = 0.1
@@ -100,9 +99,9 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
         return np.empty((0, 4))
 
 # Constants
-image_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
-label_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
-model_weights = "/kaggle/input/ld70-waid-weight/best (3).pt"
+image_dir = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/yolov8_format_v1/test/images"
+label_dir = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/yolov8_format_v1/test/labels"
+model_weights = "/kaggle/input/yolo-weights/weights/spdld.pt"
 conf_threshold = 0.5
 
 # Load YOLO model
@@ -295,14 +294,11 @@ all_targets = []
 for image_path in os.listdir(image_dir):
     # Load image and initial prediction
     img = Image.open(os.path.join(image_dir, image_path)).convert("RGB")
-    input_tensor = torch.tensor(np.array(img)).permute(2, 0, 1).unsqueeze(0).float() / 255.0
-    input_tensor = input_tensor.to("cuda" if torch.cuda.is_available() else "cpu")
     img_width, img_height = img.size
-    initial_results = model.predict(img, conf=0.25, verbose=False)
+    initial_results = model.predict(img, conf=0.25, verbose=True)
     initial_img = img.copy()  
     draw_initial = ImageDraw.Draw(initial_img)
     result = initial_results[0]
-    
     
     # Load ground truth
     true_boxes, true_labels = [], []
@@ -341,12 +337,11 @@ for image_path in os.listdir(image_dir):
         rw, rh = 0, 0
 
     # Refinement pass
-    refinement_attempts_for_image = 0
-    successful_refinements_for_image = 0
     replacement_candidates = []
     for i in range(len(predictions['scores'])):
         if predictions['scores'][i] >= conf_threshold or rw == 0 or rh == 0:
             continue
+        
         best_match = None
         best_iou = -1
         best_conf = -1
@@ -487,15 +482,37 @@ for image_path in os.listdir(image_dir):
     'scores': scores_tensor[keep_indices].tolist(),
     'labels': labels_tensor[keep_indices].tolist()
     }
-  
+    for box, score, label in zip(predictions['boxes'], predictions['scores'], predictions['labels']):
+        x1, y1, x2, y2 = box
+        # Draw rectangle
+        draw_initial.rectangle([x1, y1, x2, y2], outline="red", width=2)
+        # Add label and confidence
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_initial.text((x1, y1-10), label_text, fill="red")
     
+    final_img = img.copy()  # Create another copy of the original image
+    draw_final = ImageDraw.Draw(final_img)
 
-  # Extract just the filename without path
+    # Visualization of final predictions
+    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
+        x1, y1, x2, y2 = box
+        # Draw rectangle
+        draw_final.rectangle([x1, y1, x2, y2], outline="blue", width=2)
+        # Add label and confidence
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_final.text((x1, y1-10), label_text, fill="blue")
+
+    base_name = os.path.splitext(image_path)[0]
+    base_name = os.path.basename(base_name)  # Extract just the filename without path
 
     # Display images in the notebook
     #display(initial_img)  # Display initial image with red boxes
     #display(final_img)    # Display final image
 
+    # Save images to Kaggle working directory
+    initial_path = f'/kaggle/working/visualizations/initial/{base_name}_initial.jpg'
+    final_path = f'/kaggle/working/visualizations/final/{base_name}_final.jpg'
+    gt_path = f'/kaggle/working/visualizations/gt/{base_name}_gt.jpg'
     
 
     #code for counting
@@ -505,6 +522,28 @@ for image_path in os.listdir(image_dir):
     true_boxes = np.array(true_boxes)
     true_labels = np.array(true_labels)
     
+    final_img = img.copy()  # Create another copy of the original image
+    draw_final = ImageDraw.Draw(final_img)
+
+    # Visualization of final predictions
+    for box, score, label in zip(filtered_predictions['boxes'], filtered_predictions['scores'], filtered_predictions['labels']):
+        x1, y1, x2, y2 = box
+        # Draw rectangle
+        draw_final.rectangle([x1, y1, x2, y2], outline="green", width=2)
+        # Add label and confidence
+        label_text = f"{model.names[label]}: {score:.2f}"
+        draw_final.text((x1, y1-10), label_text, fill="green")
+        
+    gt_img = img.copy()
+    draw_gt = ImageDraw.Draw(gt_img)
+    for box, label in zip(true_boxes, true_labels):
+        x1, y1, x2, y2 = box
+        draw_gt.rectangle([x1, y1, x2, y2], outline="blue", width=2)
+        label_text = f"GT: {model.names[label]}"
+        draw_gt.text((x1, y1 - 10), label_text, fill="blue")
+    initial_img.save(initial_path)
+    final_img.save(final_path)
+    gt_img.save(gt_path)
     #draw_initial.image.save(initial_path)
     #draw_final.image.save(final_path)
     #draw_gt.image.save(gt_path)
@@ -531,7 +570,7 @@ for image_path in os.listdir(image_dir):
             img_correct += 1
             used_truth_indices.append(best_truth_idx)
         preds = [{
-        #'boxes': torch.tensor(predictions['boxes']),
+        'boxes': torch.tensor(filtered_predictions['boxes']),
         'scores': torch.tensor(filtered_predictions['scores']),
         'labels': torch.tensor(filtered_predictions['labels']),
         }]
@@ -562,6 +601,10 @@ for image_path in os.listdir(image_dir):
     }]
     metric.update(preds, targets)
 
+precision, recall = calculate_precision_recall(all_predictions, all_targets)
+map50_95, map50, class_map50_95 = calculate_map50_95(all_predictions, all_targets)
 
-final_metrics = metric.compute()
-print(f"mAP@0.5: {final_metrics['map_50']:.4f}")
+print(f"calculated Precision: {precision:.4f}")
+print(f"calculated Recall: {recall:.4f}")
+print(f"mAP@0.5: {map50:.4f}")
+print(f"Calculated mAP@50-95: {map50_95:.4f}")
