@@ -101,7 +101,7 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
 # Constants
 image_dir = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/yolov8_format_v1/test/images"
 label_dir = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/yolov8_format_v1/test/labels"
-model_weights = "/kaggle/input/yolo-weights/weights/spdld.pt"
+model_weights = "/kaggle/input/bucktale-weights/buck_weights/ssfflossp2.pt"
 conf_threshold = 0.5
 
 # Load YOLO model
