@@ -241,10 +241,10 @@ for image_path in os.listdir(IMAGE_DIR):
     final_scores = high_conf_scores[:]
     final_labels = high_conf_labels[:]
     
-    for refined in refined_predictions:
+    """for refined in refined_predictions:
         final_boxes.append(refined['bbox'])
         final_scores.append(refined['score'])
-        final_labels.append(refined['category_id'])
+        final_labels.append(refined['category_id'])"""
     
     # Apply NMS if there are any predictions
     if final_boxes and final_scores and final_labels:
