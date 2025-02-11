@@ -204,7 +204,7 @@ for image_path in os.listdir(IMAGE_DIR):
     
     # Iterate through predictions using index
     for idx in range(len(current_predictions['scores'])):
-        if CONF_THRESHOLD <= current_predictions['scores'][idx]<0.7 :  # Compare single values
+        if CONF_THRESHOLD <= current_predictions['scores'][idx] :  # Compare single values
             # Create detection object matching JSON format
             original_detection = {
                 'bbox': current_predictions['boxes'][idx],
@@ -222,7 +222,7 @@ for image_path in os.listdir(IMAGE_DIR):
             if refined is not None:  # Check for None explicitly
                 replacement_candidates.append({
                     'idx': idx,
-                    'bbox': refined['bbox'],
+                    'bbox': current_predictions['boxes'][idx],
                     'score': refined['score'],
                     'label': refined['category_id']
                 })
