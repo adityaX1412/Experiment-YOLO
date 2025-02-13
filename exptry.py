@@ -8,7 +8,7 @@ import os
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Initialize a new W&B run
-wandb.init(project="yolo_softshare")
+wandb.init(project="yolo_mew_exp")
 # Load the custom model configuration
 model = YOLO('yolov8n-LD-P2.yaml')
 model.model.to(device)
@@ -32,11 +32,11 @@ model.add_callback('on_train_batch_end', log_losses)
 
 # Train the model with the specified configuration and sync to W&B
 Result_Final_model = model.train(
-    data="/content/drive/MyDrive/waid_new/WAID_dataset/WAID-main/WAID/data.yaml",
+    data="/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml",
     epochs=70,
     batch=8,
     optimizer='SOAP',
-    project='yolo_softshare',
+    project='yolo_new_exp',
     save=True,
     imgsz = 640
 )
