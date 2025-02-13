@@ -7,7 +7,7 @@ backbone:
   - [-1, 6, C2f_Faster, [256, True]]
   - [-1, 1, LDConv, [512, 3, 2]]  
   - [-1, 6, C2f_Faster, [512, True]]
-  - [-1, 1, PyramidPoolAgg, [512, 5]]  
+  - [[-1], 1, PyramidPoolAgg, [512, 5]]  
 
 # Feature Aggregation with SimFusion & InjectionMultiSum
 head:
