@@ -1,3 +1,10 @@
+nc: 6  # number of classes
+scales: # model compound scaling constants
+  n: [0.33, 0.25, 1024]  # YOLOv8n summary
+  s: [0.33, 0.50, 1024]  # YOLOv8s summary
+  m: [0.67, 0.75, 768]   # YOLOv8m summary
+  l: [1.00, 1.00, 512]   # YOLOv8l summary
+  x: [1.00, 1.25, 512]   # YOLOv8x summary
 # Modified YOLOv8 Backbone with LDConv & Pyramid Pooling
 backbone:
   - [-1, 1, LDConv, [64, 3, 2]]  # 0-P1/2
