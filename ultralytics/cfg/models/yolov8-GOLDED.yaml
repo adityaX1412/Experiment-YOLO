@@ -44,7 +44,7 @@ head:
 
   # Final Feature Fusion before Detection
   - [[2, 4, 6], 1, ScalSeq, [128]]  # 24
-  - [[17, 12], 1, AdvPoolFusion, []]  # 25 ✅ FIXED
+  - [[17, 20], 1, AdvPoolFusion, []]  # 25 ✅ FIXED
 
 
   # Detection
