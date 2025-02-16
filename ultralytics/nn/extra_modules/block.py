@@ -2009,7 +2009,11 @@ class InjectionMultiSum_Auto_pool(nn.Module):
         g_B, g_C, g_H, g_W = x_g.shape
         use_pool = H < g_H
         
-        gloabl_info = x_g.split(self.global_inp, dim=1)[self.flag]
+        if sum(self.global_inp) != x_g.shape[1]:  # Ensure split sizes match input channels
+            self.global_inp = [x_g.shape[1]]
+
+        global_splits = x_g.split(self.global_inp, dim=1)
+        gloabl_info = global_splits[self.flag] if len(global_splits) > 1 else global_splits[0]
         print(f"x_g.shape: {x_g.shape}, global_inp: {self.global_inp}")
         print(f"x_l.shape: {x_l.shape}, gloabl_info.shape: {gloabl_info.shape}")
 
