@@ -31,7 +31,8 @@ head:
   - [[-1, -2, 10], 1, SimFusion_3in, [128,[128, 128, 128]]]  # 16 ✅ FIXED
 
   - [-1, 3, C2f_Faster, [128]]  # 17
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [32, [16, 8, 8], 0]]  # ✅ FIXED
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [32, [10, 10, 12], 0]]  # ✅ Fixed
+  # ✅ FIXED
     # 18 ✅ FIXED
 
   - [[-1, 12], 1, Concat, [1]]  # 19
