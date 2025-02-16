@@ -974,6 +974,7 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
             c2 = sum(args[0])
             args = [c1, *args]
         elif m is InjectionMultiSum_Auto_pool:
+            print(f"x_g.shape: {x_g.shape}, global_inp: {self.global_inp}")
             c1 = ch[f[0]]
             c2 = args[0]
             args = [c1, *args]
