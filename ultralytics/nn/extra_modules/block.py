@@ -2011,7 +2011,7 @@ class InjectionMultiSum_Auto_pool(nn.Module):
         
         gloabl_info = x_g.split(self.global_inp, dim=1)[self.flag]
         print(f"x_g.shape: {x_g.shape}, global_inp: {self.global_inp}")
-        print(f"x_l.shape: {x_l.shape}")
+        print(f"x_l.shape: {x_l.shape}, gloabl_info.shape: {gloabl_info.shape}")
 
         
         local_feat = self.local_embedding(x_l)
