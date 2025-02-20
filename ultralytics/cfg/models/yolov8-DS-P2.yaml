@@ -30,9 +30,9 @@ head:
   - [[-1, -2], 1, Concat, [1]]
   - [-1, 1, DySnakeConv, [170, 1]]  # 12
 
-  - [-1, 1, DySnakeConv, [43, 1]]  # 13 (channels adjusted for 3x output)
+  - [-1, 1, DySnakeConv, [85, 1]]  # 13
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']]
-  - [2, 1, DySnakeConv, [43, 1]]  # 15
+  - [2, 1, DySnakeConv, [85, 1]]  # 15
   - [[-1, -2], 1, Concat, [1]]
   - [-1, 1, DySnakeConv, [128, 1]]  # 17 (P2/4-small)
 
