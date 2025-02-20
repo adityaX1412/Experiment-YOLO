@@ -1,5 +1,5 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
-# Modified YOLOv8 with Dynamic Snake Convolution (DSConv)
+# Modified YOLOv8 with LDConv backbone and DySnakeConv head
 
 # Parameters
 nc: 6  # number of classes
@@ -11,7 +11,7 @@ scales: # model compound scaling constants
   l: [1.00, 1.00, 512]   # YOLOv8l summary
   x: [1.00, 1.25, 512]   # YOLOv8x summary
 
-# Modified YOLOv8.0n backbone 
+# Modified YOLOv8.0n backbone with LDConv
 backbone:
   - [-1, 1, LDConv, [64, 3, 2]]  # 0-P1/2
   - [-1, 1, LDConv, [128, 3, 2]]  # 1-P2/4
@@ -22,26 +22,26 @@ backbone:
   - [-1, 6, C2f_Faster, [512, True]]
   - [-1, 1, SPPF, [512, 5]]  # 7
 
-# Modified head with DSConv
+# Modified head with DySnakeConv
 head:
-  - [-1, 1, DySnakeConv, [256, 1]]  # 8 (channels reduced)
+  - [-1, 1, DySnakeConv, [85, 1]]  # 8 (channels adjusted for 3x output)
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']]
-  - [4, 1, DySnakeConv, [256, 1]]  # 10 (channels reduced)
-  - [[-1, -2], 1, Concat, [1]]
-  - [-1, 3, C2f_Faster, [256]]
+  - [4, 1, DySnakeConv, [85, 1]]  # 10
+  - [[-1, -2], 1, Concat, [1]]  # cat 256+256
+  - [-1, 3, C2f_Faster, [256]]  # 12
 
-  - [-1, 1, DySnakeConv, [128, 1]]  # 13
+  - [-1, 1, DySnakeConv, [42, 1]]  # 13 (channels adjusted for 3x output)
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']]
-  - [2, 1, DySnakeConv, [128, 1]]  # 15
-  - [[-1, -2], 1, Concat, [1]]
+  - [2, 1, DySnakeConv, [42, 1]]  # 15
+  - [[-1, -2], 1, Concat, [1]]  # cat 128+128
   - [-1, 3, C2f_Faster, [128]]  # 17 (P2/4-small)
 
-  - [-1, 1, DySnakeConv, [128, 3]]  # 18
-  - [[-1, 12], 1, Concat, [1]]
+  - [-1, 1, DySnakeConv, [42, 3]]  # 18
+  - [[-1, 12], 1, Concat, [1]]  # cat
   - [-1, 3, C2f_Faster, [256]]  # 20 (P3/8-medium)
 
-  - [-1, 1, DySnakeConv, [256, 3]]  # 21
-  - [[-1, 8], 1, Concat, [1]]
+  - [-1, 1, DySnakeConv, [85, 3]]  # 21
+  - [[-1, 8], 1, Concat, [1]]  # cat
   - [-1, 3, C2f_Faster, [512]]  # 23 (P4/16-large)
 
   # Detection
