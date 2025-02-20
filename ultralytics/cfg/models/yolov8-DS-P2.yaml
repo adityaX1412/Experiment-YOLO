@@ -36,11 +36,11 @@ head:
   - [[-1, -2], 1, Concat, [1]]
   - [-1, 3, DySnakeConv, [128]]  # 17 (P2/4-small)
 
-  - [-1, 1, DySnakeConv, [128, 3, 2]]  # 18
+  - [-1, 1, DySnakeConv, [128,1]]  # 18
   - [[-1, 12], 1, Concat, [1]]
   - [-1, 3, DySnakeConv, [256]]  # 20 (P3/8-medium)
 
-  - [-1, 1, DySnakeConv, [256, 3, 2]]  # 21
+  - [-1, 1, DySnakeConv, [256,1]]  # 21
   - [[-1, 8], 1, Concat, [1]]
   - [-1, 3, DySnakeConv, [512]]  # 23 (P4/16-large)
 
