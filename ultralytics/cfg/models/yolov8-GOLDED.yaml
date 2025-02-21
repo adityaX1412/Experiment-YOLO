@@ -44,6 +44,6 @@ head:
   - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [512, [256, 512,1024], 0]] # 28
   - [-1, 12, RepBlock, [512]]    # 29: Rep_n5
 
-  - [[20, 26, 29], 1, Detect, [nc]] # Detect(P3, N4, N5)
+  - [[14, 18, 24], 1, Detect, [nc]] # Detect(P3, N4, N5)
 
 
