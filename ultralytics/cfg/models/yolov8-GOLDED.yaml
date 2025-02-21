@@ -24,7 +24,7 @@ head:
 
   - [9, 1, Conv, [512, 1, 1]] # 13: reduce_layer_c5
   - [[4, 6, 11], 1, SimFusion_3in, [256]] # 14: LAF_p4
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [256,256,256], 0]] # 15
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [42,42,44], 0]] # 15
   - [-1, 12, RepBlock, [256]]    # 16: Rep_p4
 
   - [-1, 1, Conv, [128, 1, 1]] # 17: reduce_layer_p4
