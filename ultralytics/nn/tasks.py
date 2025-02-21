@@ -962,7 +962,6 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
             args = [c1, c2]
         # --------------GOLD-YOLO--------------
         elif m in {SimFusion_4in, AdvPoolFusion}:
-            print(f"f: {f}, ch: {ch}")
             c2 = sum(ch[x] for x in f)
         elif m is SimFusion_3in:
             c2 = args[0]

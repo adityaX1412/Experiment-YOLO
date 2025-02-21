@@ -1,4 +1,5 @@
-nc: 6  # number of classes
+# GoldYOLO-n Configuration
+nc: 6 # number of classes
 scales: # model compound scaling constants
   n: [0.33, 0.25, 1024]  # YOLOv8n summary
   s: [0.33, 0.50, 1024]  # YOLOv8s summary
@@ -6,45 +7,47 @@ scales: # model compound scaling constants
   l: [1.00, 1.00, 512]   # YOLOv8l summary
   x: [1.00, 1.25, 512]   # YOLOv8x summary
 
-# Modified YOLOv8 Backbone with LDConv & Pyramid Pooling
 backbone:
-  - [-1, 1, LDConv, [64, 3, 2]]  # 0-P1/2
-  - [-1, 1, LDConv, [128, 3, 2]]  # 1-P2/4
-  - [-1, 3, C2f_Faster, [128, True]]  # 2
-  - [-1, 1, LDConv, [256, 3, 2]]  # 3-P3/8
-  - [-1, 6, C2f_Faster, [256, True]]  # 4
-  - [-1, 1, LDConv, [512, 3, 2]]  # 5-P4/16
-  - [-1, 6, C2f_Faster, [512, True]]  # 6
-  - [[-1], 1, PyramidPoolAgg, [512, 5]]  # 7 ✅ FIXED
+  # [from, number, module, args]
+  [[-1, 1, Conv, [64, 3, 2]],    # 0-P1/2
+   [-1, 1, Conv, [128, 3, 2]],   # 1-P2/4
+   [-1, 6, C2f, [128, True]],    # 2
+   [-1, 1, Conv, [256, 3, 2]],   # 3-P3/8
+   [-1, 12, C2f, [256, True]],   # 4
+   [-1, 1, Conv, [512, 3, 2]],   # 5-P4/16
+   [-1, 18, C2f, [512, True]],   # 6
+   [-1, 1, Conv, [1024, 3, 2]],  # 7-P5/32
+   [-1, 6, C2f, [1024, True]],   # 8
+   [-1, 1, SPPF, [1024, 5]]]     # 9
 
-# Feature Aggregation with SimFusion & InjectionMultiSum
 head:
-  - [-1, 1, LDConv, [256, 1, 1]]  # 8
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 9
-  - [4, 1, LDConv, [256, 1, 1]]  # 10
-  - [[-1, -2, -3, -4], 1, SimFusion_4in, []]  # 11 ✅ FIXED
+  # RepGDNeck structure
+  [[-1, 1, SimFusion_4in, []],   # 10: low_FAM
+   [-1, 3, Conv, [96, 1, 1]],    # 11: low_IFM start
+   [-1, 1, Conv, [96, 1, 1]],    # 12: low_IFM end
 
-  - [-1, 3, C2f_Faster, [256]]  # 12
-  - [-1, 1, LDConv, [128, 1, 1]]  # 13
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 14
-  - [2, 1, LDConv, [128, 1, 1]]  # 15
-  - [[-1, -2, 10], 1, SimFusion_3in, [128,[128, 128, 128]]]  # 16 ✅ FIXED
+   [9, 1, SimConv, [512, 1, 1]], # 13: reduce_layer_c5
+   [[4, 6, 13], 1, SimFusion_3in, [256]], # 14: LAF_p4
+   [-1, 1, InjectionMultiSum_Auto_pool, [256]], # 15
+   [-1, 12, RepBlock, [256]],    # 16: Rep_p4
 
-  - [-1, 3, C2f_Faster, [128]]  # 17
-  - [-1, 1, LDConv, [128, 3, 2]]  # 18
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [32, [32], 0]]  # ✅ Now only 2 splits, both matching 16x16
-  - [[-1, 12], 1, Concat, [1]]  # 19
-  - [-1, 3, C2f_Faster, [256]]  # 20
+   [-1, 1, SimConv, [128, 1, 1]], # 17: reduce_layer_p4
+   [[2, 4, 17], 1, SimFusion_3in, [128]], # 18: LAF_p3
+   [-1, 1, InjectionMultiSum_Auto_pool, [128]], # 19
+   [-1, 12, RepBlock, [128]],    # 20: Rep_p3
 
-  - [-1, 1, LDConv, [256, 3, 2]]  # 21
-  - [[-1, 8], 1, Concat, [1]]  # 22
-  - [-1, 3, C2f_Faster, [512]]  # 23
+   [[20, 16, 9], 1, PyramidPoolAgg, [352]], # 21: high_FAM
+   [-1, 2, TopBasicLayer, [[128, 64]]], # 22: high_IFM
+   [-1, 1, Conv, [192, 1, 1]],   # 23: conv_1x1_n
 
-  # Final Feature Fusion before Detection
-  - [[2, 4, 6], 1, ScalSeq, [128]]  # 24
-  - [[17, 20], 1, AdvPoolFusion, []]  # 25 ✅ FIXED
+   [[20, 17], 1, AdvPoolFusion, []], # 24: LAF_n4
+   [-1, 1, InjectionMultiSum_Auto_pool, [256]], # 25
+   [-1, 12, RepBlock, [256]],    # 26: Rep_n4
 
-  # Detection
-  - [[25, 20, 23], 1, Detect, [nc]]  # 26
+   [[26, 13], 1, AdvPoolFusion, []], # 27: LAF_n5
+   [-1, 1, InjectionMultiSum_Auto_pool, [512]], # 28
+   [-1, 12, RepBlock, [512]],    # 29: Rep_n5
+
+   [[20, 26, 29], 1, Detect, [nc]] # Detect(P3, N4, N5)
 
 
