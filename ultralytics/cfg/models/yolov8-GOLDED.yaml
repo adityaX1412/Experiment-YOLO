@@ -23,7 +23,7 @@ head:
   - [-1, 1, Conv, [96, 1, 1]]   # 12: low_IFM end
 
   - [9, 1, Conv, [512, 1, 1]] # 13: reduce_layer_c5
-  - [[4, 6, 13], 1, SimFusion_3in, [256]] # 14: LAF_p4
+  - [[4, 6, 11], 1, SimFusion_3in, [256]] # 14: LAF_p4
   - [-1, 1, InjectionMultiSum_Auto_pool, [256]] # 15
   - [-1, 12, RepBlock, [256]]    # 16: Rep_p4
 
