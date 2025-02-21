@@ -37,7 +37,7 @@ head:
   - [-1, 1, Conv, [192, 1, 1]]   # 23: conv_1x1_n
 
   - [[18, 15], 1, AdvPoolFusion, []] # 24: LAF_n4
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [256,256,256], 0]] # 25
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [16,16,16], 0]] # 25
   - [-1, 12, RepBlock, [256]]    # 26: Rep_n4
 
   - [[24, 11], 1, AdvPoolFusion, []] # 27: LAF_n5
