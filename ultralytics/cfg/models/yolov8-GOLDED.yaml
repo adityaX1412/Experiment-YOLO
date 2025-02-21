@@ -41,7 +41,7 @@ head:
   - [-1, 12, RepBlock, [256]]    # 26: Rep_n4
 
   - [[24, 11], 1, AdvPoolFusion, []] # 27: LAF_n5
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [512, [512,512,512], 0]] # 28
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [512, [20,20,24], 0]] # 28
   - [-1, 12, RepBlock, [512]]    # 29: Rep_n5
 
   - [[18, 24, 27], 1, Detect, [nc]] # Detect(P3, N4, N5)
