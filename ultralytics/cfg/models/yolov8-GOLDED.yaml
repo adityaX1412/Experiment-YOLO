@@ -22,7 +22,7 @@ backbone:
 
 head:
   # RepGDNeck structure
-  [[-1, 1, SimFusion_4in, []],   # 10: low_FAM
+   [-1, 1, SimFusion_4in, []],   # 10: low_FAM
    [-1, 3, Conv, [96, 1, 1]],    # 11: low_IFM start
    [-1, 1, Conv, [96, 1, 1]],    # 12: low_IFM end
 
