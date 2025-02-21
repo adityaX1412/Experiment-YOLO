@@ -24,12 +24,12 @@ head:
 
   - [9, 1, Conv, [512, 1, 1]] # 13: reduce_layer_c5
   - [[4, 6, 11], 1, SimFusion_3in, [256]] # 14: LAF_p4
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [256, 512,1024], 0]] # 15
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [256,256,256], 0]] # 15
   - [-1, 12, RepBlock, [256]]    # 16: Rep_p4
 
   - [-1, 1, Conv, [128, 1, 1]] # 17: reduce_layer_p4
   - [[2, 4, 15], 1, SimFusion_3in, [128]] # 18: LAF_p3
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [128, [128, 256, 512], 0]] # 19
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [128, [128,128,128], 0]] # 19
   - [-1, 12, RepBlock, [128]]    # 20: Rep_p3
 
   - [[18, 14, 7], 1, PyramidPoolAgg, [352,5]] # 21: high_FAM
@@ -37,11 +37,11 @@ head:
   - [-1, 1, Conv, [192, 1, 1]]   # 23: conv_1x1_n
 
   - [[18, 15], 1, AdvPoolFusion, []] # 24: LAF_n4
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [256, 512,1024], 0]] # 25
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [256,256,256], 0]] # 25
   - [-1, 12, RepBlock, [256]]    # 26: Rep_n4
 
   - [[24, 11], 1, AdvPoolFusion, []] # 27: LAF_n5
-  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [512, [256, 512,1024], 0]] # 28
+  - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [512, [512,512,512], 0]] # 28
   - [-1, 12, RepBlock, [512]]    # 29: Rep_n5
 
   - [[18, 24, 27], 1, Detect, [nc]] # Detect(P3, N4, N5)
