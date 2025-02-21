@@ -32,7 +32,7 @@ head:
   - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [128, [128, 256, 512], 0]] # 19
   - [-1, 12, RepBlock, [128]]    # 20: Rep_p3
 
-  - [[18, 14, 7], 1, PyramidPoolAgg, [352]] # 21: high_FAM
+  - [[18, 14, 7], 1, PyramidPoolAgg, [352,5]] # 21: high_FAM
   - [-1, 2, TopBasicLayer, [[128, 64]]] # 22: high_IFM
   - [-1, 1, Conv, [192, 1, 1]]   # 23: conv_1x1_n
 
