@@ -36,14 +36,14 @@ head:
   - [-1, 2, TopBasicLayer, [352, [128, 64]]] # 22: high_IFM
   - [-1, 1, Conv, [192, 1, 1]]   # 23: conv_1x1_n
 
-  - [[20, 17], 1, AdvPoolFusion, []] # 24: LAF_n4
+  - [[18, 15], 1, AdvPoolFusion, []] # 24: LAF_n4
   - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [256, [256, 512,1024], 0]] # 25
   - [-1, 12, RepBlock, [256]]    # 26: Rep_n4
 
-  - [[26, 13], 1, AdvPoolFusion, []] # 27: LAF_n5
+  - [[24, 11], 1, AdvPoolFusion, []] # 27: LAF_n5
   - [[-1, -2], 1, InjectionMultiSum_Auto_pool, [512, [256, 512,1024], 0]] # 28
   - [-1, 12, RepBlock, [512]]    # 29: Rep_n5
 
-  - [[14, 18, 24], 1, Detect, [nc]] # Detect(P3, N4, N5)
+  - [[18, 24, 27], 1, Detect, [nc]] # Detect(P3, N4, N5)
 
 
