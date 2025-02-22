@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 
-from .conv import Conv, DWConv, GhostConv, LightConv, RepConv
+from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, LDConv
 from .transformer import TransformerBlock
 
 __all__ = (
@@ -607,3 +607,73 @@ class EBottleneck(nn.Module):
 
     def forward(self, x):
         return x + self.cv2(self.cv1(x)) if self.shortcut else self.cv2(self.cv1(x))
+    
+class Bottleneck_LDConv(nn.Module):
+    """Modified bottleneck using LDConv instead of standard Conv."""
+
+    def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
+        """Initialize bottleneck with LDConv.
+        
+        Args:
+            c1 (int): Input channels
+            c2 (int): Output channels
+            shortcut (bool): Add skip connection
+            g (int): Groups
+            k (tuple): Kernel sizes (unused in LDConv)
+            e (float): Expansion ratio
+            num_param (int): Number of sampling points for LDConv
+        """
+        super().__init__()
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = LDConv(c1, c_, num_param=k[0])
+        self.cv2 = LDConv(c_, c2, num_param=k[1], stride=1)
+        self.add = shortcut and c1 == c2
+
+    def forward(self, x):
+        """Forward pass through LDBottleneck."""
+        return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+
+class C2f_LDConv(nn.Module):
+    """Modified C2f using LDConv and LDBottleneck."""
+
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5,):
+        """Initialize CSP bottleneck layer with LDConv.
+        
+        Args:
+            c1 (int): Input channels
+            c2 (int): Output channels
+            n (int): Number of bottleneck layers
+            shortcut (bool): Enable shortcut in bottleneck
+            g (int): Groups
+            e (float): Expansion ratio
+            num_param (int): Number of sampling points for LDConv
+        """
+        super().__init__()
+        self.c = int(c2 * e)  # hidden channels
+        self.cv1 = LDConv(c1, 2 * self.c, num_param=3)
+        self.cv2 = LDConv((2 + n) * self.c, c2, num_param=3)
+        self.m = nn.ModuleList(
+            Bottleneck_LDConv(
+                self.c, 
+                self.c, 
+                shortcut, 
+                g, 
+                k=((3, 3)), 
+                e=1.0,
+            ) for _ in range(n)
+        )
+
+    def forward(self, x):
+        """Forward pass through LDC2f layer."""
+        y = list(self.cv1(x).chunk(2, 1))
+        y.extend(m(y[-1]) for m in self.m)
+        return self.cv2(torch.cat(y, 1))
+
+    def forward_split(self, x):
+        """Forward pass using split() instead of chunk()."""
+        y = list(self.cv1(x).split((self.c, self.c), 1))
+        y.extend(m(y[-1]) for m in self.m)
+        return self.cv2(torch.cat(y, 1))
+        
+
+
