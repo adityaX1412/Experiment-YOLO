@@ -611,7 +611,7 @@ class EBottleneck(nn.Module):
 class Bottleneck_LDConv(nn.Module):
     """Modified bottleneck using LDConv instead of standard Conv."""
 
-    def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
+    def __init__(self, c1, c2, shortcut=True, g=1, k=(1, 1), e=0.5):
         """Initialize bottleneck with LDConv.
         
         Args:
@@ -658,7 +658,7 @@ class C2f_LDConv(nn.Module):
                 self.c, 
                 shortcut, 
                 g, 
-                k=((3, 3)), 
+                k=((1, 1)), 
                 e=1.0,
             ) for _ in range(n)
         )
