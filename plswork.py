@@ -1,7 +1,8 @@
 import os
 import torch
+import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
 import json
@@ -9,8 +10,6 @@ from collections import defaultdict
 import time
 import logging
 from dub_inf_utils import *
-import matplotlib.pyplot as plt
-import cv2
 
 IMAGE_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 LABEL_DIR = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
@@ -19,16 +18,6 @@ MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdp2p2.pt"
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
-OUTPUT_DIR = "/kaggle/working/visualizations"
-
-# Create output directory if it doesn't exist
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# Load class names from yaml
-import yaml
-with open(DATA_YAML, 'r') as f:
-    data_yaml = yaml.safe_load(f)
-    class_names = data_yaml.get('names', {})
 
 model = YOLO(MODEL_WEIGHTS)
 
@@ -38,11 +27,6 @@ if not os.path.exists(predictions_path):
 
 with open(predictions_path, "r") as f:
     val_predictions = json.load(f)
-
-# Create a mapping of image_id to all its predictions
-image_to_predictions = defaultdict(list)
-for pred in val_predictions:
-    image_to_predictions[pred["image_id"]].append(pred)
 
 # Convert JSON predictions into per-image format with confidence filtering
 image_predictions = {}
@@ -58,49 +42,6 @@ for pred in val_predictions:
         image_predictions[image_name]["boxes"].append([x1, y1, x2, y2])
         image_predictions[image_name]["scores"].append(pred["score"])
         image_predictions[image_name]["labels"].append(pred["category_id"])
-
-def draw_boxes(image, boxes, labels=None, scores=None, color=(255, 0, 0), thickness=2, label_type="gt"):
-    """
-    Draw bounding boxes on an image
-    
-    Args:
-        image: PIL Image object
-        boxes: List of [x1, y1, x2, y2] coordinates
-        labels: List of class labels
-        scores: List of confidence scores
-        color: RGB tuple for box color
-        thickness: Line thickness
-        label_type: String to identify the type of box (gt, initial, refined)
-    
-    Returns:
-        PIL Image with boxes drawn
-    """
-    draw = ImageDraw.Draw(image)
-    
-    # Try to load a font, fallback to default if not available
-    try:
-        font = ImageFont.truetype("arial.ttf", 15)
-    except IOError:
-        font = ImageFont.load_default()
-    
-    for i, box in enumerate(boxes):
-        x1, y1, x2, y2 = [int(b) for b in box]
-        
-        # Draw rectangle
-        draw.rectangle([(x1, y1), (x2, y2)], outline=color, width=thickness)
-        
-        # Draw label if provided
-        if labels is not None and scores is not None:
-            label_text = f"{label_type}: {class_names.get(labels[i], labels[i])}"
-            if scores is not None:
-                label_text += f" {scores[i]:.2f}"
-            
-            # Background for text
-            text_width, text_height = draw.textbbox((0, 0), label_text, font=font)[2:]
-            draw.rectangle([(x1, y1 - text_height - 4), (x1 + text_width + 4, y1)], fill=color)
-            draw.text((x1 + 2, y1 - text_height - 2), label_text, fill=(255, 255, 255), font=font)
-    
-    return image
 
 def perform_double_inference(image_path, model, original_detection):
     """
@@ -236,14 +177,8 @@ all_predictions = []
 all_targets = []
 
 # Process each image
-processed_count = 0
 for image_path in os.listdir(IMAGE_DIR):
     img = Image.open(os.path.join(IMAGE_DIR, image_path)).convert("RGB")
-    img_width, img_height = img.size
-    
-    # Create a copy for visualization
-    vis_image = img.copy()
-    
     # Load ground truth labels
     true_boxes, true_labels = [], []
     label_path = os.path.join(LABEL_DIR, os.path.splitext(image_path)[0] + '.txt')
@@ -251,16 +186,12 @@ for image_path in os.listdir(IMAGE_DIR):
         with open(label_path, 'r') as f:
             for line in f.readlines():
                 class_id, x_center, y_center, width, height = map(float, line.strip().split())
-                x1 = (x_center - width/2) * img_width
-                y1 = (y_center - height/2) * img_height
-                x2 = (x_center + width/2) * img_width
-                y2 = (y_center + height/2) * img_height
+                x1 = (x_center - width/2) * img.width
+                y1 = (y_center - height/2) * img.height
+                x2 = (x_center + width/2) * img.width
+                y2 = (y_center + height/2) * img.height
                 true_boxes.append([x1, y1, x2, y2])
                 true_labels.append(int(class_id))
-    
-    # Draw ground truth boxes (green)
-    if true_boxes:
-        vis_image = draw_boxes(vis_image, true_boxes, true_labels, None, color=(0, 255, 0), label_type="GT")
 
     # Get predictions for current image
     image_name = os.path.splitext(image_path)[0]
@@ -269,29 +200,12 @@ for image_path in os.listdir(IMAGE_DIR):
         
     current_predictions = image_predictions[image_name]
     
-    # Draw initial prediction boxes (red)
-    initial_boxes = current_predictions['boxes'].copy()
-    initial_labels = current_predictions['labels'].copy()
-    initial_scores = current_predictions['scores'].copy()
-    
-    vis_image = draw_boxes(
-        vis_image, 
-        initial_boxes, 
-        initial_labels, 
-        initial_scores, 
-        color=(255, 0, 0), 
-        label_type="Initial"
-    )
-    
     # Process each prediction for potential refinement
     replacement_candidates = []
-    refined_boxes = []
-    refined_labels = []
-    refined_scores = []
     
     # Iterate through predictions using index
     for idx in range(len(current_predictions['scores'])):
-        if CONF_THRESHOLD <= current_predictions['scores'][idx] < 0.5:  # Compare single values
+        if CONF_THRESHOLD <= current_predictions['scores'][idx]<0.5 :  # Compare single values
             # Create detection object matching JSON format
             original_detection = {
                 'bbox': current_predictions['boxes'][idx],
@@ -313,22 +227,6 @@ for image_path in os.listdir(IMAGE_DIR):
                     'score': refined['score'],
                     'label': refined['category_id']
                 })
-                
-                # Store refined boxes for visualization
-                refined_boxes.append(refined['bbox'])
-                refined_labels.append(refined['category_id'])
-                refined_scores.append(refined['score'])
-    
-    # Draw refined prediction boxes (blue)
-    if refined_boxes:
-        vis_image = draw_boxes(
-            vis_image, 
-            refined_boxes, 
-            refined_labels, 
-            refined_scores, 
-            color=(0, 0, 255), 
-            label_type="Refined"
-        )
     
     # Apply replacements
     for candidate in replacement_candidates:
@@ -392,31 +290,6 @@ for image_path in os.listdir(IMAGE_DIR):
         all_predictions.extend(preds)
         all_targets.extend(targets)
         metric.update(preds, targets)
-    
-    # Add legend to image
-    legend_image = Image.new('RGB', (200, 100), color=(255, 255, 255))
-    legend_draw = ImageDraw.Draw(legend_image)
-    
-    # Draw legend items
-    legend_draw.rectangle([(10, 10), (30, 30)], outline=(0, 255, 0), width=2)
-    legend_draw.text((40, 15), "Ground Truth", fill=(0, 0, 0))
-    
-    legend_draw.rectangle([(10, 40), (30, 60)], outline=(255, 0, 0), width=2)
-    legend_draw.text((40, 45), "Initial Prediction", fill=(0, 0, 0))
-    
-    legend_draw.rectangle([(10, 70), (30, 90)], outline=(0, 0, 255), width=2)
-    legend_draw.text((40, 75), "Refined Prediction", fill=(0, 0, 0))
-    
-    # Paste legend onto visualization
-    vis_image.paste(legend_image, (img_width - 210, 10))
-    
-    # Save visualization
-    output_path = os.path.join(OUTPUT_DIR, f"{image_name}_visualization.jpg")
-    vis_image.save(output_path)
-    
-    processed_count += 1
-    if processed_count % 10 == 0:
-        print(f"Processed {processed_count} images")
 
 # Compute final metrics
 final_metrics = metric.compute()
@@ -429,173 +302,57 @@ print(f"Calculated mAP@50: {map50:.4f}")
 print(f"Calculated Precision: {precision:.4f}")
 print(f"Calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
-print(f"\nVisualization images saved to: {OUTPUT_DIR}")
 
-# Create a summary visualization of results
-plt.figure(figsize=(12, 6))
+OUTPUT_DIR = "kaggle/working/visualizations"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Plot mAP and precision/recall
-plt.subplot(1, 2, 1)
-plt.bar(['mAP@0.5', 'Precision', 'Recall'], [map50, precision, recall])
-plt.title('Detection Performance')
-plt.ylim(0, 1)
-for i, v in enumerate([map50, precision, recall]):
-    plt.text(i, v + 0.02, f"{v:.4f}", ha='center')
-
-# Plot sample class APs if available
-if class_aps:
-    plt.subplot(1, 2, 2)
-    class_indices = list(class_aps.keys())
-    class_values = list(class_aps.values())
-    
-    # Show top 5 classes by AP if more than 5 classes
-    if len(class_indices) > 5:
-        sorted_indices = np.argsort(class_values)[::-1][:5]
-        class_indices = [class_indices[i] for i in sorted_indices]
-        class_values = [class_values[i] for i in sorted_indices]
-    
-    class_names_display = [class_names.get(idx, f"Class {idx}") for idx in class_indices]
-    plt.bar(class_names_display, class_values)
-    plt.title('Class-wise AP@0.5')
-    plt.xticks(rotation=45, ha='right')
-    plt.ylim(0, 1)
-    
-    for i, v in enumerate(class_values):
-        plt.text(i, v + 0.02, f"{v:.2f}", ha='center')
-
-plt.tight_layout()
-plt.savefig(os.path.join(OUTPUT_DIR, "performance_summary.png"))
-plt.close()
-
-print(f"Performance summary saved to: {os.path.join(OUTPUT_DIR, 'performance_summary.png')}")
-
-# Create a visualization of the double inference process for a sample image
-def create_double_inference_visualization(image_path, model):
-    # Find an image with refinable detections
-    img_name = os.path.basename(image_path)
-    img_id = os.path.splitext(img_name)[0]
-    
-    if img_id not in image_predictions:
-        return None
-        
-    # Get initial predictions
-    initial_preds = image_predictions[img_id]
-    
-    # Find a prediction with confidence between threshold and 0.5
-    refinable_idx = None
-    for idx, score in enumerate(initial_preds['scores']):
-        if CONF_THRESHOLD <= score < 0.5:
-            refinable_idx = idx
-            break
-            
-    if refinable_idx is None:
-        return None
-        
-    # Get original image
+def draw_boxes(image_path, ground_truth, initial_preds, final_preds, output_path):
+    """
+    Draws ground truth (green), initial predictions (red), and final predictions (blue) on the image.
+    """
     img = Image.open(image_path).convert("RGB")
-    img_width, img_height = img.size
+    draw = ImageDraw.Draw(img)
     
-    # Create original detection object
-    original_detection = {
-        'bbox': initial_preds['boxes'][refinable_idx],
-        'score': initial_preds['scores'][refinable_idx],
-        'category_id': initial_preds['labels'][refinable_idx]
-    }
+    # Draw ground truth (Green)
+    for box in ground_truth:
+        draw.rectangle(box, outline="green", width=2)
     
-    # Extract detection details
-    x1, y1, x2, y2 = original_detection['bbox']
-    sw = x2 - x1  # width of detection
-    sh = y2 - y1  # height of detection
+    # Draw initial predictions (Red)
+    for box in initial_preds:
+        draw.rectangle(box, outline="red", width=2)
     
-    # Calculate adaptive crop region
-    cx, cy = (x1 + x2)/2, (y1 + y2)/2  # center of detection
+    # Draw final predictions (Blue)
+    for box in final_preds:
+        draw.rectangle(box, outline="blue", width=2)
     
-    # Calculate desired dimensions for the crop
-    scale = min(640/sw, 640/sh)
-    desired_width = sw * scale
-    desired_height = sh * scale
+    # Save visualization
+    img.save(output_path)
+
+# Process each image for visualization
+for image_path in os.listdir(IMAGE_DIR):
+    image_full_path = os.path.join(IMAGE_DIR, image_path)
+    image_name = os.path.splitext(image_path)[0]
+    output_path = os.path.join(OUTPUT_DIR, f"{image_name}.png")
     
-    # Calculate crop boundaries with padding
-    pad_factor = 0.2  # 20% padding around detection
-    new_x1 = max(0, int(cx - (desired_width * (1 + pad_factor))/2))
-    new_y1 = max(0, int(cy - (desired_height * (1 + pad_factor))/2))
-    new_x2 = min(img_width, int(cx + (desired_width * (1 + pad_factor))/2))
-    new_y2 = min(img_height, int(cy + (desired_height * (1 + pad_factor))/2))
+    # Load ground truth labels
+    true_boxes = []
+    label_path = os.path.join(LABEL_DIR, image_name + '.txt')
+    if os.path.exists(label_path):
+        with open(label_path, 'r') as f:
+            for line in f.readlines():
+                class_id, x_center, y_center, width, height = map(float, line.strip().split())
+                x1 = (x_center - width/2) * img.width
+                y1 = (y_center - height/2) * img.height
+                x2 = (x_center + width/2) * img.width
+                y2 = (y_center + height/2) * img.height
+                true_boxes.append([x1, y1, x2, y2])
     
-    # Perform crop and resize
-    crop = img.crop((new_x1, new_y1, new_x2, new_y2))
-    original_w, original_h = crop.size
-    ratio = min(640/original_w, 640/original_h)
-    new_size = (int(original_w*ratio), int(original_h*ratio))
-    resized = crop.resize(new_size, Image.BILINEAR)
-    
-    # Create padded image
-    padded_img = Image.new("RGB", (640, 640), (114, 114, 114))
-    pad_x = (640 - new_size[0])//2
-    pad_y = (640 - new_size[1])//2
-    padded_img.paste(resized, (pad_x, pad_y))
-    
-    # Perform second inference
-    with torch.no_grad():
-        new_results = model.predict(padded_img, verbose=False, augment=True)
-    
-    # Create visualization of the process
-    fig, axs = plt.subplots(2, 2, figsize=(12, 12))
-    
-    # Original image with initial detection
-    img_copy = img.copy()
-    draw = ImageDraw.Draw(img_copy)
-    draw.rectangle([(x1, y1), (x2, y2)], outline=(255, 0, 0), width=2)
-    axs[0, 0].imshow(np.array(img_copy))
-    axs[0, 0].set_title(f"Original Image with Initial Detection\nClass: {class_names.get(original_detection['category_id'], 'Unknown')}, Score: {original_detection['score']:.3f}")
-    axs[0, 0].axis('off')
-    
-    # Show crop region
-    img_crop = img.copy()
-    draw = ImageDraw.Draw(img_crop)
-    draw.rectangle([(new_x1, new_y1), (new_x2, new_y2)], outline=(0, 255, 0), width=2)
-    draw.rectangle([(x1, y1), (x2, y2)], outline=(255, 0, 0), width=2)
-    axs[0, 1].imshow(np.array(img_crop))
-    axs[0, 1].set_title("Crop Region (Green) with Original Detection (Red)")
-    axs[0, 1].axis('off')
-    
-    # Show cropped and resized image
-    axs[1, 0].imshow(np.array(padded_img))
-    axs[1, 0].set_title(f"Processed Input for Second Inference\n(Cropped, Resized, and Padded to 640×640)")
-    axs[1, 0].axis('off')
-    
-    # Run second inference and show results
-    result_img = padded_img.copy()
-    draw = ImageDraw.Draw(result_img)
-    
-    if len(new_results[0].boxes) > 0:
-        boxes = new_results[0].boxes.xyxy.cpu().numpy()
-        confs = new_results[0].boxes.conf.cpu().numpy()
-        labels = new_results[0].boxes.cls.cpu().numpy().astype(int)
+    # Get initial and final predictions
+    if image_name in image_predictions:
+        initial_boxes = image_predictions[image_name]["boxes"]
+        final_boxes = current_predictions["boxes"] if image_name in current_predictions else []
         
-        for box, score, label in zip(boxes, confs, labels):
-            x1, y1, x2, y2 = box
-            draw.rectangle([(x1, y1), (x2, y2)], outline=(0, 0, 255), width=2)
-            draw.text((x1, y1 - 10), f"{class_names.get(label, 'Unknown')}: {score:.2f}", fill=(0, 0, 255))
-    
-    axs[1, 1].imshow(np.array(result_img))
-    axs[1, 1].set_title("Second Inference Results")
-    axs[1, 1].axis('off')
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, "double_inference_example.png"))
-    plt.close()
-    
-    return os.path.join(OUTPUT_DIR, "double_inference_example.png")
+        # Save visualization
+        draw_boxes(image_full_path, true_boxes, initial_boxes, final_boxes, output_path)
 
-# Create a sample visualization of the double inference process
-sample_image_path = None
-for img_path in os.listdir(IMAGE_DIR):
-    full_path = os.path.join(IMAGE_DIR, img_path)
-    sample_image_path = full_path
-    visualization_path = create_double_inference_visualization(full_path, model)
-    if visualization_path:
-        print(f"Double inference example visualization saved to: {visualization_path}")
-        break
-
-print("Processing complete.")
+print(f"Visualizations saved in {OUTPUT_DIR}")
