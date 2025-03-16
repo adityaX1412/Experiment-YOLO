@@ -1,8 +1,7 @@
 import os
 import torch
-import cv2
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
 import json
@@ -27,6 +26,10 @@ if not os.path.exists(predictions_path):
 
 with open(predictions_path, "r") as f:
     val_predictions = json.load(f)
+
+os.makedirs('/kaggle/working/visualizations/initial', exist_ok=True)
+os.makedirs('/kaggle/working/visualizations/final', exist_ok=True)
+os.makedirs('/kaggle/working/visualizations/gt', exist_ok=True)
 
 # Convert JSON predictions into per-image format with confidence filtering
 image_predictions = {}
@@ -275,6 +278,54 @@ for image_path in os.listdir(IMAGE_DIR):
         if best_iou >= IOU_THRESHOLD:
             correct_predictions += 1
             matched_gt.add(best_gt_idx)
+            
+        initial_img = img.copy()
+        draw_initial = ImageDraw.Draw(initial_img)
+        
+        # Visualization of initial predictions (before refinement)
+        for box, score, label in zip(image_predictions[image_name]['boxes'], 
+                                image_predictions[image_name]['scores'], 
+                                image_predictions[image_name]['labels']):
+            x1, y1, x2, y2 = box
+            # Draw rectangle
+            draw_initial.rectangle([x1, y1, x2, y2], outline="red", width=2)
+            # Add label and confidence
+            label_text = f"{model.names[label]}: {score:.2f}"
+            draw_initial.text((x1, y1-10), label_text, fill="red")
+    
+            final_img = img.copy()  # Create another copy of the original image
+            draw_final = ImageDraw.Draw(final_img)
+
+            # Visualization of final predictions (after refinement and NMS)
+            for box, score, label in zip(current_predictions['boxes'], 
+                                    current_predictions['scores'], 
+                                    current_predictions['labels']):
+                x1, y1, x2, y2 = box
+                # Draw rectangle
+                draw_final.rectangle([x1, y1, x2, y2], outline="green", width=2)
+                # Add label and confidence
+                label_text = f"{model.names[label]}: {score:.2f}"
+                draw_final.text((x1, y1-10), label_text, fill="green")
+                
+            gt_img = img.copy()
+            draw_gt = ImageDraw.Draw(gt_img)
+            for box, label in zip(true_boxes, true_labels):
+                x1, y1, x2, y2 = box
+                draw_gt.rectangle([x1, y1, x2, y2], outline="blue", width=2)
+                label_text = f"GT: {model.names[label]}"
+                draw_gt.text((x1, y1 - 10), label_text, fill="blue")
+            
+            base_name = os.path.splitext(image_path)[0]
+            base_name = os.path.basename(base_name)  # Extract just the filename without path
+
+            # Save images to Kaggle working directory
+            initial_path = f'/kaggle/working/visualizations/initial/{base_name}_initial.jpg'
+            final_path = f'/kaggle/working/visualizations/final/{base_name}_final.jpg'
+            gt_path = f'/kaggle/working/visualizations/gt/{base_name}_gt.jpg'
+            
+            initial_img.save(initial_path)
+            final_img.save(final_path)
+            gt_img.save(gt_path)
 
     # Convert boxes and labels to tensors for metrics
     if current_predictions['boxes'] and true_boxes:  # Only add if there are predictions and ground truth
@@ -302,57 +353,3 @@ print(f"Calculated mAP@50: {map50:.4f}")
 print(f"Calculated Precision: {precision:.4f}")
 print(f"Calculated Recall: {recall:.4f}")
 print(f"Correct Predictions: {correct_predictions}/{total_predictions}")
-
-OUTPUT_DIR = "kaggle/working/visualizations"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def draw_boxes(image_path, ground_truth, initial_preds, final_preds, output_path):
-    """
-    Draws ground truth (green), initial predictions (red), and final predictions (blue) on the image.
-    """
-    img = Image.open(image_path).convert("RGB")
-    draw = ImageDraw.Draw(img)
-    
-    # Draw ground truth (Green)
-    for box in ground_truth:
-        draw.rectangle(box, outline="green", width=2)
-    
-    # Draw initial predictions (Red)
-    for box in initial_preds:
-        draw.rectangle(box, outline="red", width=2)
-    
-    # Draw final predictions (Blue)
-    for box in final_preds:
-        draw.rectangle(box, outline="blue", width=2)
-    
-    # Save visualization
-    img.save(output_path)
-
-# Process each image for visualization
-for image_path in os.listdir(IMAGE_DIR):
-    image_full_path = os.path.join(IMAGE_DIR, image_path)
-    image_name = os.path.splitext(image_path)[0]
-    output_path = os.path.join(OUTPUT_DIR, f"{image_name}.png")
-    
-    # Load ground truth labels
-    true_boxes = []
-    label_path = os.path.join(LABEL_DIR, image_name + '.txt')
-    if os.path.exists(label_path):
-        with open(label_path, 'r') as f:
-            for line in f.readlines():
-                class_id, x_center, y_center, width, height = map(float, line.strip().split())
-                x1 = (x_center - width/2) * img.width
-                y1 = (y_center - height/2) * img.height
-                x2 = (x_center + width/2) * img.width
-                y2 = (y_center + height/2) * img.height
-                true_boxes.append([x1, y1, x2, y2])
-    
-    # Get initial and final predictions
-    if image_name in image_predictions:
-        initial_boxes = image_predictions[image_name]["boxes"]
-        final_boxes = current_predictions["boxes"] if image_name in current_predictions else []
-        
-        # Save visualization
-        draw_boxes(image_full_path, true_boxes, initial_boxes, final_boxes, output_path)
-
-print(f"Visualizations saved in {OUTPUT_DIR}")
