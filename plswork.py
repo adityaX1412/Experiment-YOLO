@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 from PIL import Image
+from PIL import ImageDraw, ImageFont
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
 import json
@@ -278,7 +279,7 @@ for image_path in os.listdir(IMAGE_DIR):
         if best_iou >= IOU_THRESHOLD:
             correct_predictions += 1
             matched_gt.add(best_gt_idx)
-            
+
         initial_img = img.copy()
         draw_initial = ImageDraw.Draw(initial_img)
         
