@@ -101,7 +101,7 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
 # Constants
 image_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 label_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
-model_weights = "/kaggle/input/yolo-weights/weights/spdn  soap.pt"
+model_weights = "/kaggle/input/yolo-weights/weights/spdnwuloss.pt"
 conf_threshold = 0.5
 
 os.makedirs('/kaggle/working/visualizations/initial', exist_ok=True)
