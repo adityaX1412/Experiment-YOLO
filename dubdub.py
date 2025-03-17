@@ -101,7 +101,7 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
 # Constants
 image_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 label_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
-model_weights = "/kaggle/input/yolo-weights/weights/spdp2p2.pt"
+model_weights = "/kaggle/input/yolo-weights/weights/spdnwuloss.pt"
 conf_threshold = 0.5
 
 os.makedirs('/kaggle/working/visualizations/initial', exist_ok=True)
@@ -109,7 +109,7 @@ os.makedirs('/kaggle/working/visualizations/final', exist_ok=True)
 os.makedirs('/kaggle/working/visualizations/gt', exist_ok=True)
 
 # Load YOLO model
-model = YOLO("yolov8n-ASF-P2P2.yaml")
+model = YOLO("yolov8n-ASF-P2.yaml")
 # Load checkpoint (full model or state_dict)
 checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
