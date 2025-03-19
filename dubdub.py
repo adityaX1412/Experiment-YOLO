@@ -101,7 +101,7 @@ def scale_boxes(padded_boxes, pad_x, pad_y, resize_ratio_x, resize_ratio_y, crop
 # Constants
 image_dir = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/yolov8_format_v1/test/images"
 label_dir = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/yolov8_format_v1/test/labels"
-model_weights = "/kaggle/input/bucktale-weights/ssfflossp2.pt"
+model_weights = "/kaggle/input/bucktale-weights/vanilla.pt"
 conf_threshold = 0.5
 
 os.makedirs('/kaggle/working/visualizations/initial', exist_ok=True)
@@ -109,7 +109,7 @@ os.makedirs('/kaggle/working/visualizations/final', exist_ok=True)
 os.makedirs('/kaggle/working/visualizations/gt', exist_ok=True)
 
 # Load YOLO model
-model = YOLO("yolov8n-ASF-P2P2.yaml")
+model = YOLO("yolov8n.yaml")
 # Load checkpoint (full model or state_dict)
 checkpoint = torch.load(model_weights, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
