@@ -1,9 +1,9 @@
 import warnings
 warnings.filterwarnings('ignore')
-from ultralytics import YOLO
+from ultralytics import RTDETR
 
 if __name__ == '__main__':
-    model = YOLO('/kaggle/input/yolo-weights/weights/spdld.pt')
+    model = RTDETR('/kaggle/input/bucktales-retdetr-weight/RETDETR.pt')
     # /kaggle/input/yolo-weights/weights/spdnsoap.pt
     model.val(data='/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml',
               split='test',
