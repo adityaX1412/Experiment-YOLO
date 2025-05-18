@@ -425,10 +425,56 @@ def calculate_metrics(predictions, targets):
     metric.update(predictions, targets)
     results = metric.compute()
     
+    # Calculate precision and recall separately since they're not directly provided
+    tp, fp, fn = 0, 0, 0
+    
+    # Process each prediction and target pair
+    for pred, target in zip(predictions, targets):
+        pred_boxes = pred['boxes'].numpy()
+        pred_scores = pred['scores'].numpy()
+        pred_labels = pred['labels'].numpy()
+        
+        target_boxes = target['boxes'].numpy()
+        target_labels = target['labels'].numpy()
+        
+        # Track matched targets to avoid double counting
+        matched_targets = set()
+        
+        # For each prediction, find matching target
+        for i, (box, score, label) in enumerate(zip(pred_boxes, pred_scores, pred_labels)):
+            best_iou = 0
+            best_idx = -1
+            
+            # Find best matching ground truth box
+            for j, (gt_box, gt_label) in enumerate(zip(target_boxes, target_labels)):
+                if j in matched_targets:
+                    continue
+                    
+                if label == gt_label:
+                    iou = calculate_iou(box, gt_box)
+                    if iou > best_iou and iou >= IOU_THRESHOLD:
+                        best_iou = iou
+                        best_idx = j
+            
+            if best_idx >= 0:
+                # True positive
+                tp += 1
+                matched_targets.add(best_idx)
+            else:
+                # False positive
+                fp += 1
+        
+        # Count unmatched targets as false negatives
+        fn += len(target_boxes) - len(matched_targets)
+    
+    # Calculate precision and recall
+    precision = tp / max(1, tp + fp)
+    recall = tp / max(1, tp + fn)
+    
     return {
         'map_50': results['map_50'].item(),
-        'precision': results['precision'].item(),
-        'recall': results['recall'].item(),
+        'precision': precision,
+        'recall': recall,
         'class_metrics': {
             f'class_{i}': {
                 'ap': ap.item()
