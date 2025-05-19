@@ -501,22 +501,18 @@ def main():
     if len(all_predictions) < 1:  
         logging.warning(f"Only {len(all_predictions)} prediction sets collected, metrics may not be reliable")
 
-    try:
-        metrics = calculate_metrics(all_predictions, all_targets)
-        
-        logging.info(f"Results after double inference:")
-        logging.info(f"mAP@0.5: {metrics['map_50']:.4f}")
-        logging.info(f"Precision: {metrics['precision']:.4f}")
-        logging.info(f"Recall: {metrics['recall']:.4f}")
-        for class_id, class_metrics in metrics['class_metrics'].items():
-            logging.info(f"{class_id} AP: {class_metrics['ap']:.4f}")
-        print(f"Results after double inference:")
-        print(f"mAP@0.5: {metrics['map_50']:.4f}")
-        print(f"Precision: {metrics['precision']:.4f}")
-        print(f"Recall: {metrics['recall']:.4f}")
-    except Exception as e:
-        logging.error(f"Error calculating metrics: {str(e)}")
-        logging.info(f"Processed {len(results)} images with predictions")
+    metrics = calculate_metrics(all_predictions, all_targets)
+    
+    logging.info(f"Results after double inference:")
+    logging.info(f"mAP@0.5: {metrics['map_50']:.4f}")
+    logging.info(f"Precision: {metrics['precision']:.4f}")
+    logging.info(f"Recall: {metrics['recall']:.4f}")
+    for class_id, class_metrics in metrics['class_metrics'].items():
+        logging.info(f"{class_id} AP: {class_metrics['ap']:.4f}")
+    print(f"Results after double inference:")
+    print(f"mAP@0.5: {metrics['map_50']:.4f}")
+    print(f"Precision: {metrics['precision']:.4f}")
+    print(f"Recall: {metrics['recall']:.4f}")
     
     
     total_time = time.time() - start_time
