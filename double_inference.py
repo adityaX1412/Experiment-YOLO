@@ -737,6 +737,7 @@ def main():
     for class_id, class_metrics in metrics['class_metrics'].items():
         logging.info(f"{class_id} AP: {class_metrics['ap']:.4f}")
     
+    print("debugGIn")
     # Calculate statistics
     total_time = time.time() - start_time
     num_images = len(results)
