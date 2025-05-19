@@ -2,11 +2,9 @@ import os
 import torch
 import numpy as np
 from PIL import Image
-from PIL import ImageDraw, ImageFont
 from ultralytics import YOLO
 from torchmetrics.detection import MeanAveragePrecision
 import json
-from collections import defaultdict
 import time
 import logging
 import concurrent.futures
@@ -30,12 +28,6 @@ MODEL_WEIGHTS = "/kaggle/input/yolo-weights/weights/spdp2p2.pt"
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5 
 NMS_IOU_THRESHOLD = 0.45
-VISUALIZATION_DIR = '/kaggle/working/visualizations'
-
-# Create output directories
-os.makedirs(f'{VISUALIZATION_DIR}/initial', exist_ok=True)
-os.makedirs(f'{VISUALIZATION_DIR}/final', exist_ok=True)
-os.makedirs(f'{VISUALIZATION_DIR}/gt', exist_ok=True)
 
 # Utility functions
 def calculate_iou(box1, box2):
@@ -482,74 +474,6 @@ def calculate_metrics(predictions, targets):
         }
     }
 
-def visualize_results(image_path, data, model_names):
-    """
-    Visualize detection results
-    
-    Args:
-        image_path: Path to the original image
-        data: Dictionary with detection results
-        model_names: Dictionary mapping class IDs to names
-    """
-    try:
-        # Load image
-        img = Image.open(image_path).convert("RGB")
-        
-        # Create three copies
-        initial_img = img.copy()
-        final_img = img.copy()
-        gt_img = img.copy()
-        
-        # Create drawing objects
-        draw_initial = ImageDraw.Draw(initial_img)
-        draw_final = ImageDraw.Draw(final_img)
-        draw_gt = ImageDraw.Draw(gt_img)
-        
-        # Draw initial predictions
-        for box, score, label in zip(data['initial_predictions']['boxes'], 
-                                    data['initial_predictions']['scores'], 
-                                    data['initial_predictions']['labels']):
-            x1, y1, x2, y2 = box
-            # Draw rectangle
-            draw_initial.rectangle([x1, y1, x2, y2], outline="red", width=2)
-            # Add label and confidence
-            label_text = f"{model_names[label]}: {score:.2f}"
-            draw_initial.text((x1, y1-10), label_text, fill="red")
-        
-        # Draw final predictions
-        for box, score, label in zip(data['refined_predictions']['boxes'], 
-                                    data['refined_predictions']['scores'], 
-                                    data['refined_predictions']['labels']):
-            x1, y1, x2, y2 = box
-            # Draw rectangle
-            draw_final.rectangle([x1, y1, x2, y2], outline="green", width=2)
-            # Add label and confidence
-            label_text = f"{model_names[label]}: {score:.2f}"
-            draw_final.text((x1, y1-10), label_text, fill="green")
-        
-        # Draw ground truth
-        for box, label in zip(data['ground_truth']['boxes'], 
-                             data['ground_truth']['labels']):
-            x1, y1, x2, y2 = box
-            draw_gt.rectangle([x1, y1, x2, y2], outline="blue", width=2)
-            label_text = f"GT: {model_names[label]}"
-            draw_gt.text((x1, y1 - 10), label_text, fill="blue")
-        
-        # Extract base name
-        base_name = Path(image_path).stem
-        
-        # Save visualizations
-        initial_path = f'{VISUALIZATION_DIR}/initial/{base_name}_initial.jpg'
-        final_path = f'{VISUALIZATION_DIR}/final/{base_name}_final.jpg'
-        gt_path = f'{VISUALIZATION_DIR}/gt/{base_name}_gt.jpg'
-        
-        initial_img.save(initial_path)
-        final_img.save(final_path)
-        gt_img.save(gt_path)
-        
-    except Exception as e:
-        logging.error(f"Error visualizing results for {image_path}: {str(e)}")
-
 def load_image_predictions(predictions_path, conf_threshold=0.25):
     """
     Load predictions from JSON file and format them for processing
@@ -648,7 +572,7 @@ def process_image(image_path, model, image_predictions, model_names, use_augment
         # Get current predictions
         current_predictions = image_predictions[image_name]
         
-        # Make a copy of initial predictions for visualization
+        # Make a copy of initial predictions for metrics calculation
         initial_preds = {
             'boxes': current_predictions['boxes'].copy(),
             'scores': current_predictions['scores'].copy(),
@@ -707,7 +631,6 @@ def process_image(image_path, model, image_predictions, model_names, use_augment
         # Prepare results
         results = {
             'image_path': image_path,
-            'initial_predictions': initial_preds,
             'refined_predictions': {
                 'boxes': current_predictions['boxes'],
                 'scores': current_predictions['scores'],
@@ -787,11 +710,6 @@ def main():
                         all_targets.append(target)
             except Exception as e:
                 logging.error(f"Error processing {image_path}: {str(e)}")
-    
-    # Visualize results
-    logging.info("Visualizing results...")
-    for image_path, data in results.items():
-        visualize_results(image_path, data, model_names)
     
     # Calculate metrics
     logging.info("Calculating metrics...")
