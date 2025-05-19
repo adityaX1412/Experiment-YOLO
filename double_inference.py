@@ -413,7 +413,7 @@ def calculate_metrics(predictions, targets):
         return {'map_50': 0, 'precision': 0, 'recall': 0}
     
     # Use consistent calculation method
-    metric = MeanAveragePrecision(class_metrics=True)
+    metric = MeanAveragePrecision(class_metrics=True, warn_on_many_detections=False)
     metric.update(predictions, targets)
     results = metric.compute()
     
@@ -710,10 +710,28 @@ def main():
                         all_targets.append(target)
             except Exception as e:
                 logging.error(f"Error processing {image_path}: {str(e)}")
+
+    if not all_predictions or not all_targets:
+        logging.warning("No valid predictions or targets collected, cannot calculate metrics")
+        return
+    
+    # Check if we have enough data
+    if len(all_predictions) < 5:  # Arbitrary small number
+        logging.warning(f"Only {len(all_predictions)} prediction sets collected, metrics may not be reliable")
     
     # Calculate metrics
-    logging.info("Calculating metrics...")
-    metrics = calculate_metrics(all_predictions, all_targets)
+    try:
+        metrics = calculate_metrics(all_predictions, all_targets)
+        
+        # Print results
+        logging.info(f"Results after double inference:")
+        logging.info(f"mAP@0.5: {metrics['map_50']:.4f}")
+        logging.info(f"Precision: {metrics['precision']:.4f}")
+        logging.info(f"Recall: {metrics['recall']:.4f}")
+    except Exception as e:
+        logging.error(f"Error calculating metrics: {str(e)}")
+        # Optional: print some basic stats about the data
+        logging.info(f"Processed {len(results)} images with predictions")
     
     # Print results
     logging.info(f"Results after double inference:")
