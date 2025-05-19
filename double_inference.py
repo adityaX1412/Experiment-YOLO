@@ -733,12 +733,6 @@ def main():
         # Optional: print some basic stats about the data
         logging.info(f"Processed {len(results)} images with predictions")
     
-    # Print results
-    logging.info(f"Results after double inference:")
-    logging.info(f"mAP@0.5: {metrics['map_50']:.4f}")
-    logging.info(f"Precision: {metrics['precision']:.4f}")
-    logging.info(f"Recall: {metrics['recall']:.4f}")
-    
     # Print per-class metrics
     for class_id, class_metrics in metrics['class_metrics'].items():
         logging.info(f"{class_id} AP: {class_metrics['ap']:.4f}")
