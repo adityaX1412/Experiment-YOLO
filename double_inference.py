@@ -264,7 +264,7 @@ def calculate_metrics(predictions, targets):
     if not predictions or not targets:
         return {'map_50': 0, 'precision': 0, 'recall': 0}
     
-    metric = MeanAveragePrecision(class_metrics=True, warn_on_many_detections=False)
+    metric = MeanAveragePrecision(class_metrics=True, max_detection_thresholds=None)
     metric.update(predictions, targets)
     results = metric.compute()
     
