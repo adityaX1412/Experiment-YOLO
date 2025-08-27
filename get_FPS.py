@@ -47,7 +47,7 @@ if __name__ == '__main__':
     # Model
     weights = opt.weights
     if weights.endswith('.pt'):
-        model = attempt_load_weights(weights, device=device, fuse=True)
+        model = attempt_load_weights(weights, device=device, fuse=True, weights_only = False)
         print(f'Loaded {weights}')  # report
     else:
         model = YOLO(weights).model
