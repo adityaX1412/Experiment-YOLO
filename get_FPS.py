@@ -33,7 +33,7 @@ def get_weight_size(path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='/kaggle/input/yolo-weights/weights/spdp2p2.pt', help='trained weights path')
+    parser.add_argument('--weights', type=str, default='/kaggle/input/yolo-weights/weights/spdnwuloss.pt', help='trained weights path')
     parser.add_argument('--batch', type=int, default=8, help='total batch size for all GPUs')
     parser.add_argument('--imgs', nargs='+', type=int, default=[640, 640], help='[height, width] image sizes')
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
