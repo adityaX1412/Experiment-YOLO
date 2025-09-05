@@ -12,7 +12,7 @@ from pathlib import Path
 import cv2  # Added for faster image operations
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=print,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler("double_inference.log"),
@@ -421,6 +421,7 @@ def calculate_metrics(predictions, targets):
         'class_metrics': {f'class_{i}': {'ap': ap.item()} for i, ap in enumerate(results['map_per_class'])}
     }
 
+
 # ---------------- OPTIMIZED IMAGE PROCESSING ----------------
 def process_image_optimized(image_path, image_predictions, model_names, use_augment=False):
     """Optimized image processing with batch inference"""
@@ -531,18 +532,18 @@ def load_ground_truth(label_path, img_width, img_height):
 # ---------------- MAIN ----------------
 def main():
     start_time = time.time()
-    logging.info("Loading YOLO model...")
+    print("Loading YOLO model...")
     model = get_model()  # Use optimized model loading
     model_names = model.names
     
-    logging.info("Loading predictions...")
+    print("Loading predictions...")
     predictions_path = "/kaggle/input/json-files/spdp2p2.json"
     image_predictions = load_image_predictions(predictions_path, CONF_THRESHOLD)
     
     image_files = [os.path.join(IMAGE_DIR, f) for f in os.listdir(IMAGE_DIR)
                   if os.path.splitext(f)[0] in image_predictions]
     
-    logging.info(f"Processing {len(image_files)} images with optimized double inference...")
+    print(f"Processing {len(image_files)} images with optimized double inference...")
     
     results = {}
     all_predictions, all_targets = [], []
@@ -583,13 +584,12 @@ def main():
     total_time = time.time() - start_time
     avg_extra_time = total_extra_time / max(1, len(image_files))
     
-    logging.info("===== OPTIMIZED DOUBLE INFERENCE METRICS =====")
-    logging.info(f"mAP@0.5: {metrics['map_50']:.4f}")
-    logging.info(f"Precision: {metrics['precision']:.4f}")
-    logging.info(f"Recall: {metrics['recall']:.4f}")
-    logging.info(f"Processing time: {total_time:.2f} seconds")
-    logging.info(f"Average extra inference time per image: {avg_extra_time:.4f} seconds")
-    logging.info(f"Relative overhead ratio: {(avg_extra_time / (total_time - total_extra_time))*100:.2f}%")
+    print(f"mAP@0.5: {metrics['map_50']:.4f}")
+    print(f"Precision: {metrics['precision']:.4f}")
+    print(f"Recall: {metrics['recall']:.4f}")
+    print(f"Processing time: {total_time:.2f} seconds")
+    print(f"Average extra inference time per image: {avg_extra_time:.4f} seconds")
+    print(f"Relative overhead ratio: {(avg_extra_time / (total_time - total_extra_time))*100:.2f}%")
     
     return results, metrics
 
