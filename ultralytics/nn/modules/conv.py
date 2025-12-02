@@ -23,6 +23,8 @@ __all__ = (
     "Concat",
     "RepConv",
     "DSConv",
+    "Conv2d_BN",
+    "MBConv",
     "LDConv"
 )
 
@@ -499,3 +501,113 @@ class LDConv(nn.Module):
         
         x_offset = rearrange(x_offset, 'b c h w n -> b c (h n) w')
         return x_offset
+    
+class Conv2d_BN(torch.nn.Sequential):
+    """A sequential container that performs 2D convolution followed by batch normalization."""
+
+    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1, groups=1, bn_weight_init=1):
+        """Initializes the Conv2d_BN with given parameters."""
+        super().__init__()
+        self.add_module("c", torch.nn.Conv2d(a, b, ks, stride, pad, dilation, groups, bias=False))
+        bn = torch.nn.BatchNorm2d(b)
+        torch.nn.init.constant_(bn.weight, bn_weight_init)
+        torch.nn.init.constant_(bn.bias, 0)
+        self.add_module("bn", bn)
+
+class MBConv(nn.Module):
+    """Mobile Inverted Bottleneck Conv (MBConv) layer, part of the EfficientNet architecture.
+       Can repeat the block `n` times for YOLO-style depth scaling.
+    """
+
+    def __init__(self, in_chans, out_chans, n=1, expand_ratio=6, activation=nn.SiLU, drop_path=0.0, stride=1):
+        """
+        Args:
+            in_chans (int): Input channels.
+            out_chans (int): Output channels.
+            n (int): Number of repetitions of the MBConv block.
+            expand_ratio (int/float): Expansion factor for hidden channels.
+            activation (nn.Module or str): Activation function class.
+            drop_path (float): Drop path rate (ignored here, Identity).
+            stride (int): Stride for the first block only.
+        """
+        super().__init__()
+
+        # Resolve activation if string
+        if isinstance(activation, str):
+            activation = getattr(torch.nn, activation) if hasattr(torch.nn, activation) else eval(activation)
+
+        # Repeat the block `n` times with residual connections
+        blocks = []
+        current_in_chans = in_chans
+        
+        for i in range(n):
+            # Only the first block uses the specified stride, others use stride=1
+            block_stride = stride if i == 0 else 1
+            # Only the last block changes channels, others maintain the same channel count
+            current_out_chans = out_chans if i == n - 1 else current_in_chans
+            
+            blocks.append(_ResidualMBConvBlock(
+                current_in_chans, 
+                current_out_chans, 
+                expand_ratio, 
+                activation, 
+                drop_path,
+                stride=block_stride
+            ))
+            current_in_chans = current_out_chans
+
+        self.blocks = nn.Sequential(*blocks)
+        self.out_chans = out_chans
+
+    def forward(self, x):
+        return self.blocks(x)
+
+
+class _ResidualMBConvBlock(nn.Module):
+    """Single MBConv block with residual connection only when input/output channels match and stride=1."""
+    
+    def __init__(self, in_chans, out_chans, expand_ratio, activation, drop_path, stride=1):
+        super().__init__()
+        hidden_ch = int(in_chans * expand_ratio)
+        
+        # Skip expansion if expand_ratio = 1 (like in the first EfficientNet stage)
+        if expand_ratio != 1:
+            # Pointwise expansion
+            self.conv1 = Conv2d_BN(in_chans, hidden_ch, ks=1)
+            self.act1 = activation()
+            self.has_expansion = True
+        else:
+            self.has_expansion = False
+            hidden_ch = in_chans
+        
+        # Depthwise convolution with stride
+        self.conv2 = Conv2d_BN(hidden_ch, hidden_ch, ks=3, stride=stride, pad=1, groups=hidden_ch)
+        self.act2 = activation()
+        
+        # Pointwise projection
+        self.conv3 = Conv2d_BN(hidden_ch, out_chans, ks=1, bn_weight_init=0.0)
+        
+        # Only add residual connection if input and output channels match AND stride is 1
+        self.use_residual = (in_chans == out_chans) and (stride == 1)
+        
+        self.drop_path = nn.Identity()  # Placeholder for drop path
+
+    def forward(self, x):
+        shortcut = x
+        
+        # Forward through the block
+        if self.has_expansion:
+            x = self.conv1(x)
+            x = self.act1(x)
+            
+        x = self.conv2(x)
+        x = self.act2(x)
+        x = self.conv3(x)
+        x = self.drop_path(x)
+        
+        # Add residual connection only if channels match and stride=1
+        if self.use_residual:
+            x += shortcut
+            
+        return x
+

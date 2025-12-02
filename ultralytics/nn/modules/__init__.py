@@ -57,6 +57,8 @@ from .conv import (
     LightConv,
     RepConv,
     SpatialAttention,
+    Conv2d_BN,
+    MBConv,
     LDConv
 )
 from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment
@@ -127,5 +129,7 @@ __all__ = (
     "MLP",
     "ResNetLayer",
     "OBB",
+    "Conv2d_BN",
+    "MBConv",
     "LDConv"
 )
