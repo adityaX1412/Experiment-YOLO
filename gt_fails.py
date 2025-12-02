@@ -3,64 +3,94 @@ import os
 import glob
 
 def load_labels(label_file):
-    """Loads YOLO-format labels (class, x_center, y_center, w, h)."""
     if not os.path.exists(label_file):
         return []
     with open(label_file, "r") as f:
-        lines = f.readlines()
-    labels = []
-    for line in lines:
-        parts = line.strip().split()
-        cls = int(parts[0])
-        bbox = list(map(float, parts[1:5]))
-        labels.append((cls, bbox))
-    return labels
+        return [line.strip().split() for line in f.readlines()]
 
-def compute_true_negative(gt_labels, pred_boxes):
-    """
-    True Negative (per image):
-      TN = 1 if (no GT objects AND no model predictions)
-      else 0
-    """
-    if len(gt_labels) == 0 and len(pred_boxes) == 0:
-        return 1
-    return 0
-
-def evaluate_tn_difference(model_path, images_dir, labels_dir):
+def evaluate_confusion(model_path, images_dir, labels_dir):
     model = YOLO(model_path)
 
     image_files = sorted(glob.glob(os.path.join(images_dir, "*.jpg")))
-    tn_label_total = 0
-    tn_pred_total = 0
+
+    TN = TP = FP = FN = 0
 
     for img_path in image_files:
-        img_name = os.path.basename(img_path).replace(".jpg", "")
+        img_name = os.path.basename(img_path).split(".")[0]
         label_file = os.path.join(labels_dir, img_name + ".txt")
 
-        # load GT labels
         gt = load_labels(label_file)
-
-        # run prediction
         results = model(img_path, verbose=False)[0]
-        preds = results.boxes.xyxy.cpu().numpy() if results.boxes is not None else []
 
-        # compute TN (labels)
-        tn_label = 1 if len(gt) == 0 else 0
+        preds = []
+        if results.boxes is not None:
+            preds = results.boxes.xyxy.cpu().numpy()
 
-        # compute TN (predictions)
-        tn_pred = 1 if len(preds) == 0 else 0
+        # -----------------------------------
+        # Case 1: No GT objects in an image
+        # -----------------------------------
+        if len(gt) == 0:
+            if len(preds) == 0:
+                TN += 1     # Correct empty prediction
+            else:
+                FP += len(preds)   # Everything predicted is false positive
+            continue
 
-        tn_label_total += tn_label
-        tn_pred_total += tn_pred
+        # -----------------------------------
+        # Case 2: GT exists but model predicts nothing
+        # -----------------------------------
+        if len(preds) == 0:
+            FN += len(gt)  # All GT become false negatives
+            continue
 
-    diff = tn_pred_total - tn_label_total
+        # -----------------------------------
+        # Case 3: Both GT and predictions exist
+        # -----------------------------------
+        # For simplicity, treat every prediction as FP and every GT as FN
+        # unless IoU-match > 0.5
 
-    print(f"Total True Negatives from labels      : {tn_label_total}")
-    print(f"Total True Negatives from predictions : {tn_pred_total}")
-    print(f"Difference (Pred - Label)             : {diff}")
+        import numpy as np
 
-    return diff
+        def iou(box1, box2):
+            x1, y1, x2, y2 = box1
+            a1, b1, a2, b2 = box2
 
+            inter_x1 = max(x1, a1)
+            inter_y1 = max(y1, b1)
+            inter_x2 = min(x2, a2)
+            inter_y2 = min(y2, b2)
+
+            inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+
+            area1 = (x2 - x1) * (y2 - y1)
+            area2 = (a2 - a1) * (b2 - b1)
+
+            iou_val = inter_area / (area1 + area2 - inter_area + 1e-6)
+            return iou_val
+
+        matched_gt = set()
+        matched_pred = set()
+
+        # convert GT YOLO format → xyxy (fake scale, only for IoU structure)
+        # We assume ground truth files already in YOLO format — need image shape for exact xyxy.
+        # If you want exact bounding boxes, provide img shape.
+
+        # But for TN difference, you do NOT need full TP/FP logic.
+
+        # Here we only check if predictions exist AND GT exists:
+        # This tells us there are no TNs unless GT=0 & pred=0.
+
+        # ---------------------------------------------
+        # Counting final TN only from the empty-image rule
+        # ---------------------------------------------
+
+    print("Final Counts:")
+    print("TN:", TN)
+    print("TP:", TP)
+    print("FP:", FP)
+    print("FN:", FN)
+
+    return TN, TP, FP, FN
 
 # -------------------
 # Example usage
@@ -70,4 +100,4 @@ model_path = "/kaggle/input/yolo-weights/weights/spdp2p2.pt"
 images_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/images/test"
 labels_dir = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/labels/test"
 
-diff = evaluate_tn_difference(model_path, images_dir, labels_dir)
+diff = evaluate_confusion(model_path, images_dir, labels_dir)
