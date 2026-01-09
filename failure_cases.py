@@ -348,8 +348,8 @@ def main():
 
         # Add text labels and counts
         h, w = img.shape[:2]
-        cv2.putText(combined, f"Vanilla ({len(vanilla_boxes)})", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
-        cv2.putText(combined, f"Double ({len(refined_boxes)})", (w + 20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+        #cv2.putText(combined, f"Vanilla ({len(vanilla_boxes)})", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
+        #cv2.putText(combined, f"Double ({len(refined_boxes)})", (w + 20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
 
         out_name = os.path.basename(image_path)
         save_path = os.path.join(OUT_DIR, out_name)
