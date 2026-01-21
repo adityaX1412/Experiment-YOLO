@@ -197,7 +197,7 @@ def get_coco_gt(val_field, dataset_root=None, data_yaml=None, out_dir="/kaggle/w
 # Suppose WAID_DATA_YAML and BUCK_DATA_YAML are defined (paths to their data.yaml)
 # Load each YAML and get proper GT JSON (or convert)
 WAID_DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
-BUCK_DATA_YAML = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/data.yaml"
+BUCK_DATA_YAML = "/kaggle/input/bucktales-patched/bucktales_patched/dtc2023.yaml"
 
 # parse
 waid_yaml = read_yaml(WAID_DATA_YAML)
