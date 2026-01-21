@@ -113,85 +113,60 @@ def find_coco_json_in_folder(folder):
     return None
 
 # ---------- Main: get a COCO GT json for a data.yaml val field ----------
-def get_coco_gt(val_field, dataset_root=None, data_yaml=None, out_dir="/kaggle/working/converted_coco"):
+def get_coco_gt(val_images_dir, data_yaml, out_dir="/kaggle/working/converted_coco"):
     """
-    val_field: value of data.yaml['val'] — may be a json path or a directory path
-    dataset_root: optional root folder to resolve relative paths
-    data_yaml: parsed yaml dict if available (used to get names)
+    val_images_dir: path like .../images/valid
+    data_yaml: parsed data.yaml dict (for class names)
     """
     os.makedirs(out_dir, exist_ok=True)
-    # If val_field is a file and it's json -> good
-    if isinstance(val_field, str) and os.path.isfile(val_field) and val_field.lower().endswith(".json"):
-        return val_field
 
-    # If val_field is a directory, try to find a COCO json inside
-    if isinstance(val_field, str) and os.path.isdir(val_field):
-        found = find_coco_json_in_folder(val_field)
-        if found:
-            return found
-        # maybe the YAML points to images dir; try to locate labels in sibling 'labels' folder
-        # attempt to infer structure:
-        images_dir = val_field
-        # possible labels dir candidates near images_dir
-        candidates = [
-            os.path.join(os.path.dirname(images_dir), "labels"),
-            os.path.join(images_dir, "labels"),
-            os.path.join(os.path.dirname(images_dir), "annotations"),
-            os.path.join(images_dir, "annotations"),
-            os.path.dirname(images_dir)
-        ]
-        labels_dir = None
-        for c in candidates:
-            if c and os.path.isdir(c):
-                # check if there are .txt files
-                if len(glob.glob(os.path.join(c, "*.txt"))) > 0:
-                    labels_dir = c
-                    break
-        # if we didn't find labels, also check for .txt in images dir (some people put labels alongside images)
-        if labels_dir is None and len(glob.glob(os.path.join(images_dir, "*.txt"))) > 0:
-            labels_dir = images_dir
+    # sanity
+    if not os.path.isdir(val_images_dir):
+        raise FileNotFoundError(f"val path is not a directory: {val_images_dir}")
 
-        if labels_dir:
-            # get classes list
-            classes = None
-            if data_yaml:
-                # YAML may have names: either list or path to names file
-                names_obj = data_yaml.get("names") or data_yaml.get("names_file") or data_yaml.get("nc")
-                if isinstance(names_obj, list):
-                    classes = names_obj
-                elif isinstance(names_obj, str):
-                    names_path = names_obj
-                    if dataset_root and not os.path.isabs(names_path):
-                        names_path = os.path.join(dataset_root, names_path)
-                    if os.path.exists(names_path):
-                        # file listing names (one per line)
-                        with open(names_path, 'r') as f:
-                            classes = [ln.strip() for ln in f if ln.strip()]
-            if classes is None:
-                # fallback: infer max class index from label files and create generic names
-                max_cls = -1
-                for lf in glob.glob(os.path.join(labels_dir, "*.txt")):
-                    with open(lf, 'r') as f:
-                        for ln in f:
-                            parts = ln.strip().split()
-                            if parts:
-                                cls_i = int(parts[0])
-                                if cls_i > max_cls: max_cls = cls_i
-                classes = [f"class{c}" for c in range(max_cls+1)] if max_cls >= 0 else ["class0"]
+    # 1️⃣ Check if COCO json already exists somewhere nearby
+    found = find_coco_json_in_folder(os.path.dirname(val_images_dir))
+    if found:
+        print("Found existing COCO JSON:", found)
+        return found
 
-            out_json = os.path.join(out_dir, os.path.basename(labels_dir.strip("/")) + "_coco.json")
-            print("Converting YOLO labels -> COCO JSON:", out_json)
-            return yolo_to_coco(images_dir, labels_dir, classes, out_json)
-        else:
-            raise FileNotFoundError("Could not find COCO JSON or YOLO labels in directory: " + images_dir)
+    # 2️⃣ Infer labels/valid from images/valid
+    images_dir = val_images_dir
+    labels_dir = images_dir.replace("/images/", "/labels/")
 
-    # if val_field is a path-like that doesn't exist, maybe it's relative to dataset_root
-    if dataset_root and isinstance(val_field, str):
-        alt = os.path.join(dataset_root, val_field)
-        if os.path.exists(alt):
-            return get_coco_gt(alt, dataset_root=dataset_root, data_yaml=data_yaml, out_dir=out_dir)
+    if not os.path.isdir(labels_dir):
+        raise FileNotFoundError(
+            f"Expected YOLO labels at {labels_dir} but folder does not exist"
+        )
 
-    raise FileNotFoundError("Cannot resolve val path to a COCO JSON or YOLO labels: " + str(val_field))
+    # 3️⃣ Get class names from data.yaml
+    names = data_yaml.get("names")
+    if names is None:
+        raise ValueError("data.yaml must contain `names:` for YOLO→COCO conversion")
+
+    if isinstance(names, dict):
+        # YOLOv8 sometimes stores names as dict {0: 'class'}
+        classes = [names[k] for k in sorted(names.keys())]
+    else:
+        classes = list(names)
+
+    out_json = os.path.join(
+        out_dir,
+        os.path.basename(images_dir.rstrip("/")) + "_coco.json"
+    )
+
+    print("Converting YOLO labels → COCO JSON")
+    print(" images:", images_dir)
+    print(" labels:", labels_dir)
+    print(" output:", out_json)
+
+    return yolo_to_coco(
+        images_dir=images_dir,
+        labels_dir=labels_dir,
+        classes=classes,
+        out_json_path=out_json
+    )
+
 
 # ---------- Example integration with your existing code ----------
 # Suppose WAID_DATA_YAML and BUCK_DATA_YAML are defined (paths to their data.yaml)
@@ -199,20 +174,17 @@ def get_coco_gt(val_field, dataset_root=None, data_yaml=None, out_dir="/kaggle/w
 WAID_DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
 BUCK_DATA_YAML = "/kaggle/input/bucktales-patched/bucktales_patched/dtc2023.yaml"
 
-# parse
+# Parse YAMLs
 waid_yaml = read_yaml(WAID_DATA_YAML)
 buck_yaml = read_yaml(BUCK_DATA_YAML)
 
-# Resolve val fields (dataset_root helps if YAML uses relative paths)
-waid_val_field = waid_yaml.get("val") or waid_yaml.get("val_path") or waid_yaml.get("val_images")
-buck_val_field = buck_yaml.get("val") or buck_yaml.get("val_path") or buck_yaml.get("val_images")
+# These MUST point to images/valid (which they already do in your case)
+waid_val_images = waid_yaml["val"]
+buck_val_images = buck_yaml["val"]
 
-# Call helper: this will either return a COCO json if present, or convert YOLO labels -> COCO json
-gt_waid_json = get_coco_gt(waid_val_field, dataset_root=os.path.dirname(WAID_DATA_YAML), data_yaml=waid_yaml)
-gt_buck_json = get_coco_gt(buck_val_field, dataset_root=os.path.dirname(BUCK_DATA_YAML), data_yaml=buck_yaml)
+# Resolve GT COCO JSONs (auto-convert YOLO labels)
+gt_waid_json = get_coco_gt(waid_val_images, waid_yaml)
+gt_buck_json = get_coco_gt(buck_val_images, buck_yaml)
 
-print("Resolved GT WAID JSON:", gt_waid_json)
-print("Resolved GT BUCK JSON:", gt_buck_json)
-
-# Now you can call per_image_ap50(gt_waid_json, pred_waid, ...) from the earlier cell,
-# where pred_waid is the predictions.json produced by ultralytics val/save_json.
+print("GT WAID JSON:", gt_waid_json)
+print("GT BUCK JSON:", gt_buck_json)
