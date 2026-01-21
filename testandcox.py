@@ -1,224 +1,218 @@
+# Run after you've installed ultralytics, pycocotools, pillow, etc.
 import os
-import json
 import glob
-import time
+import json
+from pathlib import Path
+from PIL import Image
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from ultralytics import YOLO
 from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from scipy import stats
 
-# ============== USER CONFIG ==============
-# Path to YOLO weights (put your .pt in /kaggle/input/weights/)
-WEIGHTS = "/kaggle/input/yolo-weights/weights/spdld.pt"
-
-# Datasets - point to folder containing a data.yaml and COCO validation JSON
-WAID_DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
-BUCK_DATA_YAML = "/kaggle/input/bucktales-patched/bucktales_patched/dtc2023.yaml"
-
-# Output folder for predictions and per-image CSVs
-OUT_DIR = "/kaggle/working/yolo_eval_outputs"
-os.makedirs(OUT_DIR, exist_ok=True)
-# =========================================
-
-# Quick check
-for p in [WEIGHTS, WAID_DATA_YAML, BUCK_DATA_YAML]:
-    if not os.path.exists(p):
-        print("WARNING: path missing:", p)
-
-# Utility: find predictions JSON from ultralytics run_dir if needed
-def find_predictions_json(search_root="."):
-    # search for predictions.json or /predictions.json created by ultralytics val(save_json=True)
-    matches = glob.glob(os.path.join(search_root, "**", "predictions.json"), recursive=True)
-    return matches[-1] if matches else None
-
-# Utility: compute per-image AP@0.5 by running COCOeval for each image (slow but exact)
-def per_image_ap50(gt_json_path, pred_json_path, img_ids=None, use_tqdm=True):
-    """
-    Returns DataFrame with columns: image_id, ap50
-    gt_json_path: path to COCO-format ground truth json
-    pred_json_path: path to COCO-format predictions json (list of detections)
-    img_ids: optional list of image ids to evaluate (defaults to all in GT)
-    """
-    cocoGt = COCO(gt_json_path)
-    cocoDt = cocoGt.loadRes(pred_json_path)
-
-    if img_ids is None:
-        img_ids = cocoGt.getImgIds()
-    results = []
-    # We'll set COCOeval to use only IoU=0.5
-    for imgId in tqdm(img_ids, disable=not use_tqdm):
-        cocoEval = COCOeval(cocoGt, cocoDt, iouType='bbox')
-        cocoEval.params.imgIds = [imgId]
-        cocoEval.params.iouThrs = np.array([0.5])  # only IoU=0.5
-        cocoEval.params.maxDets = [100]  # keep default max detections
-        # evaluate -> accumulate -> compute precision array
-        cocoEval.evaluate()
-        cocoEval.accumulate()
-        # precision shape: [T, R, K, A, M] where T=len(iouThrs)=1, R=len(recThrs), K=numCats, A=area ranges, M=maxDets
-        prec = cocoEval.eval.get('precision')
-        if prec is None:
-            ap50_val = 0.0
-        else:
-            # pick the slice for IoU=0.5 -> prec[0, :, :, 0, 0]
-            arr = prec[0, :, :, 0, 0]  # shape (recThrs, numCats)
-            valid = arr[arr > -1]
-            ap50_val = float(np.mean(valid)) if valid.size > 0 else 0.0
-        results.append({"image_id": imgId, "ap50": ap50_val})
-    df = pd.DataFrame(results)
-    return df
-
-# Utility: effect sizes
-def cohens_d(x, y):
-    nx, ny = len(x), len(y)
-    dof = nx + ny - 2
-    pooled_sd = np.sqrt(((nx-1)*np.var(x, ddof=1) + (ny-1)*np.var(y, ddof=1)) / dof)
-    return (np.mean(x) - np.mean(y)) / pooled_sd
-
-def cliffs_delta(x, y):
-    nx, ny = len(x), len(y)
-    greater = 0
-    lesser = 0
-    for a in x:
-        for b in y:
-            if a > b:
-                greater += 1
-            elif a < b:
-                lesser += 1
-    return (greater - lesser) / (nx * ny)
-
-# Cell 3: Load model
-print("Loading model from", WEIGHTS)
-model = YOLO(WEIGHTS)
-
-# Cell 4: Run validation on WAID and BUCK to produce predictions.json (COCO-style)
-# ultralytics val(..., save_json=True) will create predictions.json in the run folder.
-print("Running validation (this will run model.val for each dataset and save predictions.json).")
-res_waid = model.val(data=WAID_DATA_YAML, imgsz=640, save_json=True)   # adjust imgsz if needed
-res_buck = model.val(data=BUCK_DATA_YAML, imgsz=640, save_json=True)
-
-# Locate predictions JSON files (Ultralytics saves to runs/val/exp*/predictions.json)
-pred_waid = find_predictions_json(search_root=".")
-pred_buck = find_predictions_json(search_root=".")
-print("Predictions (WAID):", pred_waid)
-# Note: if both runs created predictions.json, the second call above will likely point to the last file.
-# To be explicit, you can search for the latest files by modification time:
-all_preds = sorted(glob.glob("**/predictions.json", recursive=True), key=os.path.getmtime)
-if len(all_preds) >= 2:
-    # heuristics: last two correspond to the two runs
-    pred_buck = all_preds[-1]
-    pred_waid = all_preds[-2]
-elif len(all_preds) == 1:
-    # only one found: maybe one dataset only ran
-    pred_waid = pred_buck = all_preds[0]
-
-print("Using predictions:")
-print(" WAID predictions:", pred_waid)
-print(" BUCK predictions:", pred_buck)
-
-# Cell 5: Identify GT annotation files from data.yaml (we will parse them)
-def read_coco_gt_from_yaml(yaml_path):
+# ---------- Utility: read data.yaml safely ----------
+def read_yaml(yaml_path):
     import yaml
-    with open(yaml_path) as f:
-        d = yaml.safe_load(f)
-    # yaml typically contains something like: val: /path/to/annotations/instances_val2017.json
-    val = d.get("val") or d.get("val_path") or d.get("val_annotations")
-    if isinstance(val, list):
-        # take first
-        val = val[0]
-    return val
+    with open(yaml_path, 'r') as f:
+        return yaml.safe_load(f)
 
-gt_waid = read_coco_gt_from_yaml(WAID_DATA_YAML)
-gt_buck = read_coco_gt_from_yaml(BUCK_DATA_YAML)
-print("GT WAID:", gt_waid)
-print("GT BUCK:", gt_buck)
+# ---------- Convert YOLO label folder -> COCO JSON ----------
+def yolo_to_coco(images_dir, labels_dir, classes, out_json_path, start_ann_id=1):
+    """
+    images_dir: folder with images
+    labels_dir: folder with .txt YOLO labels (same stem as images)
+    classes: list of class names (index -> name)
+    out_json_path: path to save COCO JSON
+    """
+    images = []
+    annotations = []
+    categories = []
+    for cid, cname in enumerate(classes):
+        categories.append({"id": cid, "name": cname, "supercategory": "none"})
+    ann_id = start_ann_id
+    img_id = 1
+    img_paths = sorted(glob.glob(os.path.join(images_dir, "*.*")))
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+    img_paths = [p for p in img_paths if Path(p).suffix.lower() in IMAGE_EXTS]
 
-# Cell 6: Compute per-image AP@0.5 (this will take time)
-print("Computing per-image AP@0.5 for WAID...")
-df_waid = per_image_ap50(gt_waid, pred_waid, use_tqdm=True)
-print("Computing per-image AP@0.5 for BUCKTales...")
-df_buck = per_image_ap50(gt_buck, pred_buck, use_tqdm=True)
+    for p in tqdm(img_paths, desc="images"):
+        try:
+            with Image.open(p) as im:
+                w, h = im.size
+        except Exception as e:
+            # skip unreadable images
+            print("Skipping image (cannot open):", p, e)
+            continue
 
-# Save CSVs
-waid_csv = os.path.join(OUT_DIR, "waid_per_image_ap50.csv")
-buck_csv = os.path.join(OUT_DIR, "buck_per_image_ap50.csv")
-df_waid.to_csv(waid_csv, index=False)
-df_buck.to_csv(buck_csv, index=False)
-print("Saved:", waid_csv)
-print("Saved:", buck_csv)
+        img_info = {"file_name": os.path.relpath(p), "height": h, "width": w, "id": img_id}
+        images.append(img_info)
+        # find label file with same stem
+        stem = Path(p).stem
+        label_file = os.path.join(labels_dir, stem + ".txt")
+        if os.path.exists(label_file):
+            with open(label_file, 'r') as f:
+                lines = [ln.strip() for ln in f if ln.strip()]
+            for ln in lines:
+                parts = ln.split()
+                if len(parts) < 5:
+                    continue
+                cls = int(parts[0])
+                x_center = float(parts[1])
+                y_center = float(parts[2])
+                bw = float(parts[3])
+                bh = float(parts[4])
+                # convert normalized YOLO xywh to absolute [x_min, y_min, width, height]
+                x_min = (x_center - bw/2.0) * w
+                y_min = (y_center - bh/2.0) * h
+                width = bw * w
+                height = bh * h
+                # clamp
+                x_min = max(0.0, x_min)
+                y_min = max(0.0, y_min)
+                width = max(0.0, min(width, w - x_min))
+                height = max(0.0, min(height, h - y_min))
+                area = width * height
+                ann = {
+                    "id": ann_id,
+                    "image_id": img_id,
+                    "category_id": cls,
+                    "bbox": [x_min, y_min, width, height],
+                    "area": area,
+                    "iscrowd": 0,
+                    "segmentation": []
+                }
+                annotations.append(ann)
+                ann_id += 1
+        img_id += 1
 
-# Cell 7: Statistical testing
-# If datasets are independent (different images) -> Mann-Whitney U or t-test
-# If paired (same images) -> paired t-test or Wilcoxon
-waid_vals = df_waid["ap50"].values
-buck_vals = df_buck["ap50"].values
+    coco = {"images": images, "annotations": annotations, "categories": categories}
+    with open(out_json_path, 'w') as f:
+        json.dump(coco, f)
+    return out_json_path
 
-# QUICK DECISION: Are image sets identical (paired) ?
-paired = False
-# crude check: if any image ids overlap -> could be paired if corresponding images are the same
-overlap = set(df_waid["image_id"]).intersection(set(df_buck["image_id"]))
-if len(overlap) > 0:
-    print(f"Found {len(overlap)} overlapping image ids -> treating as paired comparison.")
-    paired = True
+# ---------- Helper: find a COCO JSON in a dataset folder ----------
+def find_coco_json_in_folder(folder):
+    # common filenames
+    candidates = [
+        "instances_val2017.json", "instances_val.json", "annotations.json",
+        "val_annotations.json", "annotations/instances_val.json"
+    ]
+    # look for any json in folder tree that contains "annotations" or "instances" in name
+    for c in candidates:
+        p = os.path.join(folder, c)
+        if os.path.exists(p):
+            return p
+    # fallback: search for any json file that looks like coco (has "images" and "annotations" keys)
+    for p in glob.glob(os.path.join(folder, "**", "*.json"), recursive=True):
+        try:
+            with open(p, 'r') as f:
+                j = json.load(f)
+            if isinstance(j, dict) and "images" in j and "annotations" in j:
+                return p
+        except Exception:
+            continue
+    return None
 
-# Normality checks
-print("Shapiro WAID:", stats.shapiro(waid_vals))
-print("Shapiro BUCK:", stats.shapiro(buck_vals))
+# ---------- Main: get a COCO GT json for a data.yaml val field ----------
+def get_coco_gt(val_field, dataset_root=None, data_yaml=None, out_dir="/kaggle/working/converted_coco"):
+    """
+    val_field: value of data.yaml['val'] — may be a json path or a directory path
+    dataset_root: optional root folder to resolve relative paths
+    data_yaml: parsed yaml dict if available (used to get names)
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    # If val_field is a file and it's json -> good
+    if isinstance(val_field, str) and os.path.isfile(val_field) and val_field.lower().endswith(".json"):
+        return val_field
 
-# Variance check (if independent)
-if not paired:
-    print("Levene test for equal variances:", stats.levene(waid_vals, buck_vals))
+    # If val_field is a directory, try to find a COCO json inside
+    if isinstance(val_field, str) and os.path.isdir(val_field):
+        found = find_coco_json_in_folder(val_field)
+        if found:
+            return found
+        # maybe the YAML points to images dir; try to locate labels in sibling 'labels' folder
+        # attempt to infer structure:
+        images_dir = val_field
+        # possible labels dir candidates near images_dir
+        candidates = [
+            os.path.join(os.path.dirname(images_dir), "labels"),
+            os.path.join(images_dir, "labels"),
+            os.path.join(os.path.dirname(images_dir), "annotations"),
+            os.path.join(images_dir, "annotations"),
+            os.path.dirname(images_dir)
+        ]
+        labels_dir = None
+        for c in candidates:
+            if c and os.path.isdir(c):
+                # check if there are .txt files
+                if len(glob.glob(os.path.join(c, "*.txt"))) > 0:
+                    labels_dir = c
+                    break
+        # if we didn't find labels, also check for .txt in images dir (some people put labels alongside images)
+        if labels_dir is None and len(glob.glob(os.path.join(images_dir, "*.txt"))) > 0:
+            labels_dir = images_dir
 
-# Perform tests
-results = {}
-if paired:
-    # align values on overlapping image ids
-    common_ids = sorted(list(overlap))
-    # create maps
-    waid_map = df_waid.set_index("image_id").loc[common_ids]["ap50"].values
-    buck_map = df_buck.set_index("image_id").loc[common_ids]["ap50"].values
-    # paired t-test
-    results['paired_ttest'] = stats.ttest_rel(waid_map, buck_map)
-    # Wilcoxon
-    try:
-        results['wilcoxon'] = stats.wilcoxon(waid_map, buck_map)
-    except Exception as e:
-        results['wilcoxon'] = ("error", str(e))
-    results['cohens_d'] = cohens_d(waid_map, buck_map)
-    results['cliffs_delta'] = cliffs_delta(waid_map, buck_map)
-else:
-    # independent case
-    # Normal t-test (Welch)
-    results['ttest_ind'] = stats.ttest_ind(waid_vals, buck_vals, equal_var=False)
-    # Mann-Whitney U
-    results['mannwhitneyu'] = stats.mannwhitneyu(waid_vals, buck_vals, alternative="two-sided")
-    results['cohens_d'] = cohens_d(waid_vals, buck_vals)
-    results['cliffs_delta'] = cliffs_delta(waid_vals, buck_vals)
+        if labels_dir:
+            # get classes list
+            classes = None
+            if data_yaml:
+                # YAML may have names: either list or path to names file
+                names_obj = data_yaml.get("names") or data_yaml.get("names_file") or data_yaml.get("nc")
+                if isinstance(names_obj, list):
+                    classes = names_obj
+                elif isinstance(names_obj, str):
+                    names_path = names_obj
+                    if dataset_root and not os.path.isabs(names_path):
+                        names_path = os.path.join(dataset_root, names_path)
+                    if os.path.exists(names_path):
+                        # file listing names (one per line)
+                        with open(names_path, 'r') as f:
+                            classes = [ln.strip() for ln in f if ln.strip()]
+            if classes is None:
+                # fallback: infer max class index from label files and create generic names
+                max_cls = -1
+                for lf in glob.glob(os.path.join(labels_dir, "*.txt")):
+                    with open(lf, 'r') as f:
+                        for ln in f:
+                            parts = ln.strip().split()
+                            if parts:
+                                cls_i = int(parts[0])
+                                if cls_i > max_cls: max_cls = cls_i
+                classes = [f"class{c}" for c in range(max_cls+1)] if max_cls >= 0 else ["class0"]
 
-# Print summary
-print("\n=== STATISTICAL TESTS SUMMARY ===")
-for k, v in results.items():
-    print(k, "->", v)
+            out_json = os.path.join(out_dir, os.path.basename(labels_dir.strip("/")) + "_coco.json")
+            print("Converting YOLO labels -> COCO JSON:", out_json)
+            return yolo_to_coco(images_dir, labels_dir, classes, out_json)
+        else:
+            raise FileNotFoundError("Could not find COCO JSON or YOLO labels in directory: " + images_dir)
 
-# Save summary to CSV
-summary = {
-    "waid_mean_ap50": float(np.mean(waid_vals)),
-    "waid_std_ap50": float(np.std(waid_vals, ddof=1)),
-    "waid_n": int(len(waid_vals)),
-    "buck_mean_ap50": float(np.mean(buck_vals)),
-    "buck_std_ap50": float(np.std(buck_vals, ddof=1)),
-    "buck_n": int(len(buck_vals)),
-    "paired": paired,
-    "tests": {k: (str(v) if not hasattr(v, 'pvalue') else (float(getattr(v, 'statistic')), float(getattr(v, 'pvalue')))) for k,v in results.items()}
-}
-summary_path = os.path.join(OUT_DIR, "stats_summary.json")
-with open(summary_path, "w") as f:
-    json.dump(summary, f, indent=2)
-print("Saved summary:", summary_path)
+    # if val_field is a path-like that doesn't exist, maybe it's relative to dataset_root
+    if dataset_root and isinstance(val_field, str):
+        alt = os.path.join(dataset_root, val_field)
+        if os.path.exists(alt):
+            return get_coco_gt(alt, dataset_root=dataset_root, data_yaml=data_yaml, out_dir=out_dir)
 
-# Cell 8: Print help/hints for reading outputs
-print("\nOutputs are in:", OUT_DIR)
-print(" - per-image CSVs:", waid_csv, buck_csv)
-print(" - stats summary JSON:", summary_path)
+    raise FileNotFoundError("Cannot resolve val path to a COCO JSON or YOLO labels: " + str(val_field))
+
+# ---------- Example integration with your existing code ----------
+# Suppose WAID_DATA_YAML and BUCK_DATA_YAML are defined (paths to their data.yaml)
+# Load each YAML and get proper GT JSON (or convert)
+WAID_DATA_YAML = "/kaggle/input/waiddataset/WAID-main/WAID-main/WAID/data.yaml"
+BUCK_DATA_YAML = "/kaggle/input/bucktales-patched/bucktales_patched/yolov8_format_v1/data.yaml"
+
+# parse
+waid_yaml = read_yaml(WAID_DATA_YAML)
+buck_yaml = read_yaml(BUCK_DATA_YAML)
+
+# Resolve val fields (dataset_root helps if YAML uses relative paths)
+waid_val_field = waid_yaml.get("val") or waid_yaml.get("val_path") or waid_yaml.get("val_images")
+buck_val_field = buck_yaml.get("val") or buck_yaml.get("val_path") or buck_yaml.get("val_images")
+
+# Call helper: this will either return a COCO json if present, or convert YOLO labels -> COCO json
+gt_waid_json = get_coco_gt(waid_val_field, dataset_root=os.path.dirname(WAID_DATA_YAML), data_yaml=waid_yaml)
+gt_buck_json = get_coco_gt(buck_val_field, dataset_root=os.path.dirname(BUCK_DATA_YAML), data_yaml=buck_yaml)
+
+print("Resolved GT WAID JSON:", gt_waid_json)
+print("Resolved GT BUCK JSON:", gt_buck_json)
+
+# Now you can call per_image_ap50(gt_waid_json, pred_waid, ...) from the earlier cell,
+# where pred_waid is the predictions.json produced by ultralytics val/save_json.
